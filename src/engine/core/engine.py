@@ -6,6 +6,7 @@ remember(), recall(), consolidate(), forget(), stats()
 
 import json
 import logging
+import math
 import re
 import numpy as np
 from datetime import datetime, timezone
@@ -13,10 +14,9 @@ from typing import List, Optional, Dict, Any
 
 from ..config import EngineConfig
 from .memory import Memory, get_band, get_format
-from .decay import compute_activation, activation_to_temperature
 from .activation import compute_temperature  # New 7-stage equation
-from .signals import compute_da, compute_ne, compute_usage
-from .signals_enhanced import compute_da as compute_da_enhanced, compute_ne as compute_ne_enhanced, compute_gaba
+from .signals_enhanced import compute_da, compute_ne, compute_gaba, compute_usage
+from .signals_enhanced import update_signals_batch  # for consolidation
 from .pruning import compute_signal_uncertainty, compute_prune_probability, should_prune
 from .protection import update_retrieval_importance, compute_compression_resistance
 from .compression import should_compress, compress, COMPRESSION_THRESHOLDS
@@ -32,32 +32,12 @@ from ..storage.postgres import PostgresStore
 from ..storage.entity_graph import EntityGraphStore
 from ..embeddings.embed import embed, embed_query, get_model, get_embed_dim
 from ..utils import extract_session_id, parse_context_date
-from .entity_extraction import extract_entities, extract_entities_gemma
+from .entity_extraction import extract_entities, ENTITY_STOPWORDS
 
 logger = logging.getLogger(__name__)
 
-# Common words misidentified as named entities (capitalized at sentence start,
-# after [Assistant]:, etc.). Filter these out of entity graph tracking.
-_ENTITY_STOPWORDS = {
-    "here", "the", "this", "that", "it's", "i'm", "i'll", "i've", "i'd",
-    "you", "you're", "you'll", "we", "we're", "they", "there", "these",
-    "those", "what", "when", "where", "which", "who", "how", "why",
-    "yes", "no", "not", "but", "and", "or", "so", "if", "then",
-    "also", "just", "very", "really", "well", "sure", "great", "good",
-    "some", "many", "much", "more", "most", "other", "another", "such",
-    "like", "want", "need", "can", "will", "would", "could", "should",
-    "let", "make", "get", "take", "give", "have", "had", "has", "was",
-    "were", "been", "being", "are", "did", "does", "done",
-    "user", "assistant", "session context", "user: i'm", "user: i",
-    "here are", "one", "two", "three", "four", "five",
-    "remember", "think", "know", "see", "look", "try", "keep",
-    "first", "last", "new", "old", "next", "start", "end",
-    "absolutely", "definitely", "certainly", "exactly", "actually",
-    "however", "although", "while", "since", "because", "therefore",
-    "sure", "sure,", "okay", "right", "thanks", "thank", "please",
-    "maybe", "perhaps", "probably", "might", "today", "tomorrow",
-    "based", "here's", "that's", "there's", "what's", "it",
-}
+# Single source of truth for entity stopwords lives in entity_extraction.
+_ENTITY_STOPWORDS = ENTITY_STOPWORDS
 
 
 class MemoryEngine:
@@ -84,12 +64,13 @@ class MemoryEngine:
         # Embed
         content_embedding = embed(content, self.config.embed_model)
 
-        # Compute DA (relevance)
-        da = compute_da(content, source, self.config.goals)
+        # DA at ingest: no retrieval history yet, baseline only.
+        da = compute_da(access_count=0, avg_outcome=0.0, user_rating=0.0, goal_alignment=0.0)
 
-        # Compute NE (novelty)
+        # NE / GABA at ingest: cosine novelty / redundancy vs recent embeddings.
         recent_embeddings = self.store.get_recent_embeddings(limit=50)
-        ne = compute_ne(content_embedding, recent_embeddings)
+        ne = compute_ne(content_embedding, recent_embeddings, age_days=0.001)
+        gaba = compute_gaba(content_embedding, recent_embeddings, age_days=0.001)
 
         # Extract entities and update graph (before novelty gate — stats accumulate either way)
         # Only track named/numeric entities for graph — concepts are too noisy
@@ -102,12 +83,8 @@ class MemoryEngine:
                 continue
             c_clean = c.rstrip('.,;:!?').strip()
             if t == "named":
-                # Multi-word named entities (Dr. Patel, Austin Film Festival) are reliable
-                if ' ' in c_clean and len(c_clean) > 5:
+                if c_clean.lower() not in ENTITY_STOPWORDS and len(c_clean) >= 2:
                     entities.append((n, t, c_clean))
-                # Single-word named: skip — too many false positives from capitalized
-                # sentence starts. The known model/dataset lists in extract_entities
-                # already handle important single-word proper nouns.
                 continue
             if t == "numeric":
                 entities.append((n, t, c_clean))
@@ -124,6 +101,7 @@ class MemoryEngine:
                 region="neocortex",
                 da_relevance=da,
                 ne_novelty=ne,
+                gaba_inhibition=gaba,
                 usage_score=0.0,
                 embedding=content_embedding,
                 source=source,
@@ -160,6 +138,7 @@ class MemoryEngine:
             region="hippocampus",
             da_relevance=da,
             ne_novelty=ne,
+            gaba_inhibition=gaba,
             usage_score=0.0,
             da_history=[da],
             ne_history=[ne],
@@ -182,10 +161,6 @@ class MemoryEngine:
         # Initialize token-level erosion weights
         tokens = tokenize(content)
         mem.token_weights = score_token_importance(tokens, known_entities=entity_canonicals)
-
-        # High-salience boost
-        if da > 0.5:
-            mem.temperature = min(1.0, 1.0 + 0.05)
 
         self.store.store(mem)
 
@@ -230,12 +205,23 @@ class MemoryEngine:
         memories = []
         entity_work = []  # (mem_id, entities, session_id) for deferred entity linking
 
+        # Seed novelty/redundancy context with already-stored recent embeddings;
+        # new items in this batch then become context for subsequent items.
+        all_embeddings = list(self.store.get_recent_embeddings(limit=50))
+
         for item, content_embedding in zip(items, embeddings):
             content = item["content"]
             source = item.get("source", "direct")
             context = item.get("context", "")
 
-            da = compute_da(content, source, self.config.goals)
+            da = compute_da(access_count=0, avg_outcome=0.0, user_rating=0.0, goal_alignment=0.0)
+            if all_embeddings:
+                ne = compute_ne(content_embedding, all_embeddings, age_days=0.001)
+                gaba = compute_gaba(content_embedding, all_embeddings, age_days=0.001)
+            else:
+                ne = 0.8
+                gaba = 0.1
+            all_embeddings.append(content_embedding)
 
             entity_canonicals = []
             entities = []
@@ -247,7 +233,7 @@ class MemoryEngine:
                         continue
                     c_clean = c.rstrip('.,;:!?').strip()
                     if t == "named":
-                        if ' ' in c_clean and len(c_clean) > 5:
+                        if c_clean.lower() not in ENTITY_STOPWORDS and len(c_clean) >= 2:
                             entities.append((n, t, c_clean))
                         continue
                     if t == "numeric":
@@ -258,8 +244,8 @@ class MemoryEngine:
 
             mem = Memory(
                 raw_content=content, temperature=1.0, region="hippocampus",
-                da_relevance=da, ne_novelty=0.5, usage_score=0.0,
-                da_history=[da], ne_history=[0.5], signal_variance=0.5,
+                da_relevance=da, ne_novelty=ne, gaba_inhibition=gaba, usage_score=0.0,
+                da_history=[da], ne_history=[ne], signal_variance=0.5,
                 embedding=content_embedding, source=source, context=context,
                 time_of_day=tod, day_of_week=dow,
                 created_at=now, last_accessed=now, access_times=[now], access_count=0,
@@ -502,6 +488,23 @@ class MemoryEngine:
             cycles_since_access = self._cycles_since_access(mem, now)
             mem.gaba_inhibition = min(0.95, 1.0 - np.exp(-0.3 * cycles_since_access))
 
+            # 1b. Recompute DA from retrieval history (no outcome/rating tracking yet).
+            mem.da_relevance = compute_da(
+                access_count=mem.access_count,
+                avg_outcome=0.0,
+                user_rating=0.0,
+                goal_alignment=0.0,
+            )
+
+            # 1c. NE decays toward 0 with age (novelty fades; old things stop
+            # being surprising). Full O(N²) cosine recompute is too expensive
+            # for the base path — exponential decay is the biological analog.
+            age_days = (now - mem.last_accessed).total_seconds() / 86400.0 if mem.last_accessed else 1.0
+            age_days = max(0.0, age_days)
+            decayed_ne = mem.ne_novelty * math.exp(-0.05 * age_days)
+            # Clamp subnormals — pg `real` rejects values smaller than ~1e-37
+            mem.ne_novelty = decayed_ne if decayed_ne > 1e-30 else 0.0
+
             # 2. Compute temperature using new 7-stage Dendric activation equation
             # Converts access times from datetime to days-ago float
             accesses_days_ago = [
@@ -689,134 +692,6 @@ class MemoryEngine:
         for i in range(len(entity_ids)):
             for j in range(i + 1, len(entity_ids)):
                 entity_graph.upsert_entity_edge(entity_ids[i], entity_ids[j])
-
-    def gemma_reextract_pass(
-        self,
-        max_memories: Optional[int] = None,
-        only_unprocessed: bool = True,
-        ollama_url: str = "http://127.0.0.1:11434",
-        model: str = "gemma4:e2b",
-    ) -> dict:
-        """
-        Offline re-extraction pass using Gemma 4 E2B.
-
-        For each eligible memory:
-        1. Re-extract entities + relations from raw_content via Gemma
-        2. Wipe existing (noisy) entity links for that memory
-        3. Insert clean Gemma entities and link them
-        4. Persist relation triples as typed entity_edges
-
-        Slow (~20s/memory) — intended to run between consolidation cycles
-        offline. Result: cleaner entity graph, richer relations, better
-        aggregates downstream.
-
-        Args:
-            max_memories: Cap on memories to process (None = all)
-            only_unprocessed: Skip memories already re-extracted (gemma_reextracted=True)
-            ollama_url: Ollama server endpoint
-            model: Ollama model tag
-
-        Returns: stats dict
-        """
-        import psycopg2.extras
-        stats = {
-            "processed": 0,
-            "entities_added": 0,
-            "triples_added": 0,
-            "skipped_no_content": 0,
-            "errors": 0,
-        }
-
-        # Select memories to process
-        with self.store.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            where = "WHERE raw_content IS NOT NULL AND raw_content != ''"
-            if only_unprocessed:
-                where += " AND (gemma_reextracted IS NULL OR gemma_reextracted = FALSE)"
-            where += " AND (source IS NULL OR source != 'aggregate')"
-            limit = f"LIMIT {int(max_memories)}" if max_memories else ""
-            cur.execute(f"""
-                SELECT id, raw_content, context
-                FROM memories
-                {where}
-                ORDER BY created_at
-                {limit}
-            """)
-            rows = cur.fetchall()
-
-        if not rows:
-            logger.info("gemma_reextract_pass: no memories to process")
-            return stats
-
-        logger.info(f"gemma_reextract_pass: processing {len(rows)} memories with {model}")
-        entity_graph = EntityGraphStore(self.store.conn)
-
-        for i, row in enumerate(rows):
-            mid = row["id"]
-            content = row["raw_content"]
-            if not content:
-                stats["skipped_no_content"] += 1
-                continue
-
-            session_id = extract_session_id(row.get("context", ""))
-
-            try:
-                entities, triples = extract_entities_gemma(
-                    content, ollama_url=ollama_url, model=model
-                )
-            except Exception as e:
-                logger.warning(f"Gemma extraction failed for {mid}: {e}")
-                stats["errors"] += 1
-                continue
-
-            # Wipe existing entity links for this memory (replace with Gemma's)
-            entity_graph.delete_memory_entities(mid)
-
-            # Insert clean Gemma entities + links
-            entity_ids = []
-            for name, etype, canonical in entities:
-                eid = entity_graph.upsert_entity(canonical, etype, name)
-                if session_id:
-                    entity_graph.update_entity_session(eid, session_id)
-                entity_graph.insert_memory_entity(mid, eid, salience=0.7)
-                entity_ids.append(eid)
-                stats["entities_added"] += 1
-
-            # Co-occurrence edges among entities in this memory
-            for a in range(len(entity_ids)):
-                for b in range(a + 1, len(entity_ids)):
-                    entity_graph.upsert_entity_edge(entity_ids[a], entity_ids[b])
-
-            # Persist Gemma relation triples as typed/predicated edges
-            for subj, rel, obj in triples:
-                try:
-                    entity_graph.upsert_compression_edge(
-                        source_name=subj.lower().strip(),
-                        source_type="named",
-                        target_name=obj.lower().strip(),
-                        target_type="named",
-                        predicate=rel.lower().strip()[:64],
-                        weight=1.0,
-                    )
-                    stats["triples_added"] += 1
-                except Exception as e:
-                    logger.debug(f"Edge insert failed: {e}")
-
-            # Mark memory as re-extracted
-            self.store.update_fields(mid, {"gemma_reextracted": True})
-            stats["processed"] += 1
-
-            if (i + 1) % 25 == 0:
-                logger.info(
-                    f"  gemma_reextract: {i+1}/{len(rows)}  "
-                    f"entities={stats['entities_added']}  triples={stats['triples_added']}"
-                )
-
-        logger.info(
-            f"gemma_reextract_pass DONE: processed={stats['processed']}  "
-            f"entities={stats['entities_added']}  triples={stats['triples_added']}  "
-            f"errors={stats['errors']}"
-        )
-        return stats
 
     def _synthesize_aggregates(self, min_sessions: int = 3) -> int:
         """Create or update aggregate memories for high-fan-out entities.

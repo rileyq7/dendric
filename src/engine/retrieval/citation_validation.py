@@ -41,7 +41,7 @@ def validate_spreading_activation_vs_citations(
             "details": {paper_id: {citation_stats}}
         }
     """
-    from ..core.entity_extraction import compute_spreading_activation
+    from .spreading_activation import compute_spreading_activation
 
     metrics = {
         "citation_pairs_tested": 0,

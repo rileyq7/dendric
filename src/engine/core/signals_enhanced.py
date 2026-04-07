@@ -148,6 +148,18 @@ def compute_gaba(
     return min(1.0, gaba)
 
 
+def compute_usage(
+    access_count: int,
+    retrieval_hits: int,
+    cycles_since_last_access: int,
+) -> float:
+    """Usage score derived from access patterns."""
+    freq = min(1.0, access_count / 20.0)
+    relevance = min(1.0, retrieval_hits / 10.0)
+    recency = max(0.0, 1.0 - (cycles_since_last_access / 30.0))
+    return 0.4 * freq + 0.3 * relevance + 0.3 * recency
+
+
 def update_signals_batch(
     memories: List[Dict[str, Any]],
     goal_embeddings: Optional[List[List[float]]] = None,

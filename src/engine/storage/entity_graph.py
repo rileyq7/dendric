@@ -318,7 +318,8 @@ class EntityGraphStore:
             # Find entity pairs in memories accessed since last consolidation
             if last_consolidation_time:
                 cur.execute("""
-                    SELECT e1.entity_id, e2.entity_id, COUNT(*) as co_access_count
+                    SELECT e1.entity_id as entity_a_id, e2.entity_id as entity_b_id,
+                           COUNT(*) as co_access_count
                     FROM memory_entities e1
                     JOIN memory_entities e2
                         ON e1.memory_id = e2.memory_id AND e1.entity_id < e2.entity_id
@@ -330,18 +331,14 @@ class EntityGraphStore:
 
                 for row in co_accessed:
                     boost = math.log1p(row['co_access_count']) * 0.1
+                    entity_a = row['entity_a_id']
+                    entity_b = row['entity_b_id']
                     cur.execute("""
                         UPDATE entity_edges
                         SET weight = LEAST(weight + %s, 1.0),
                             last_reinforced = NOW()
                         WHERE (entity_a = %s AND entity_b = %s)
-                           OR (entity_a = %s AND entity_b = %s)
-                    """, (boost,
-                          row['entity_id'], row['entity_id_1'] if 'entity_id_1' in row else row['entity_id'],
-                          row['entity_id'], row['entity_id']))
-                    # Simplified: use the two entity_id columns from the query
-                    # The query aliases them as entity_id (from e1) and entity_id (from e2)
-                    # psycopg2 will suffix duplicates
+                    """, (boost, entity_a, entity_b))
 
             # Step 2: Fan-effect decay
             # Edges involving high-fan entities decay faster
