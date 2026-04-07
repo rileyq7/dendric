@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Memory Engine v0.1</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+const API = "http://localhost:5001/api";
+
+const BAND_CONFIG = {
+  scorching: { color: "#C4392A", soft: "#FCEAE7" },
+  hot: { color: "#C86B28", soft: "#FDF0E4" },
+  warm: { color: "#A68B1E", soft: "#FAF4E0" },
+  room: { color: "#2A8C5A", soft: "#E6F5ED" },
+  cool: { color: "#2878A8", soft: "#E4F0F8" },
+  cold: { color: "#3456A0", soft: "#E6EBF8" },
+  trace: { color: "#6858B0", soft: "#EEEAF8" },
+};
+
+const getBand = (t) => {
+  if (t >= 0.85) return "scorching";
+  if (t >= 0.70) return "hot";
+  if (t >= 0.55) return "warm";
+  if (t >= 0.40) return "room";
+  if (t >= 0.25) return "cool";
+  if (t >= 0.10) return "cold";
+  return "trace";
+};
+
+const getFormat = (t) => {
+  if (t >= 0.70) return "raw";
+  if (t >= 0.55) return "summary";
+  if (t >= 0.40) return "nugget";
+  if (t >= 0.10) return "edges";
+  return "trace";
+};
+
+const SOURCES = ["direct","conversation","meeting","research","note","observation","idea","planning","complaint"];
+
+const api = async (path, opts = {}) => {
+  try {
+    const r = await fetch(API + path, { headers: { "Content-Type": "application/json" }, ...opts });
+    return r.json();
+  } catch (e) { console.error(e); return null; }
+};
+
+function TempGauge({ bands, total }) {
+  const order = ["scorching","hot","warm","room","cool","cold","trace"];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {order.map(b => {
+        const count = bands[b] || 0;
+        const pct = total > 0 ? (count / total) * 100 : 0;
+        return (
+          <div key={b} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 56, fontSize: 9, color: BAND_CONFIG[b].color, fontFamily: "var(--mono)", textAlign: "right", opacity: count > 0 ? 1 : 0.3 }}>{b}</span>
+            <div style={{ flex: 1, height: 4, background: "rgba(0,0,0,0.04)", borderRadius: 2, overflow: "hidden" }}>
+              <div style={{ width: `${pct}%`, height: "100%", background: BAND_CONFIG[b].color, borderRadius: 2, transition: "width 0.6s ease", opacity: 0.6 }} />
+            </div>
+            <span style={{ width: 20, fontSize: 9, color: "rgba(0,0,0,0.2)", fontFamily: "var(--mono)", textAlign: "right" }}>{count || ""}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Stat({ label, value, accent }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <span style={{ fontSize: 9, color: "rgba(0,0,0,0.3)", fontFamily: "var(--mono)", textTransform: "uppercase", letterSpacing: 1.5 }}>{label}</span>
+      <span style={{ fontSize: 22, fontWeight: 400, fontFamily: "var(--mono)", color: accent || "var(--fg)", letterSpacing: -0.5 }}>{value}</span>
+    </div>
+  );
+}
+
+function SignalDot({ label, value, color }) {
+  const v = value || 0;
+  const c = color || `rgba(0,0,0,${0.15 + v * 0.35})`;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      <div style={{ width: 5, height: 5, borderRadius: 3, background: c, opacity: 0.7 }} />
+      <span style={{ fontSize: 9, fontFamily: "var(--mono)", color: c }}>{label} {v.toFixed(2)}</span>
+    </div>
+  );
+}
+
+function NodeCard({ mem, onClick, isSelected, rank, showScore }) {
+  const band = getBand(mem.temperature);
+  const cfg = BAND_CONFIG[band];
+  const content = mem.best_content || mem.raw_content || "";
+  const sig = mem.signals || {};
+  const da = sig.DA || sig.da || sig.da_relevance || 0;
+  const ne = sig.NE || sig.ne || sig.ne_novelty || 0;
+  const usage = sig.usage || sig.usage_score || 0;
+
+  return (
+    <div onClick={() => onClick(mem)} style={{
+      background: isSelected ? cfg.soft : "#FAFAF6",
+      border: `1px solid ${isSelected ? cfg.color + "40" : "rgba(0,0,0,0.06)"}`,
+      borderLeft: `3px solid ${cfg.color}`,
+      borderRadius: 8, padding: "14px 16px", cursor: "pointer",
+      transition: "all 0.2s ease", marginBottom: 6,
+      boxShadow: isSelected ? `0 2px 12px ${cfg.color}10` : "0 1px 3px rgba(0,0,0,0.03)",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+        {rank != null && <span style={{ fontSize: 10, color: "rgba(0,0,0,0.2)", fontFamily: "var(--mono)", width: 18 }}>#{rank}</span>}
+        <span style={{ fontSize: 11, fontFamily: "var(--mono)", color: cfg.color, fontWeight: 500, letterSpacing: 0.3 }}>{mem.temperature?.toFixed(3)}</span>
+        <span style={{ fontSize: 9, color: "rgba(0,0,0,0.3)", fontFamily: "var(--mono)", padding: "2px 6px", background: "rgba(0,0,0,0.03)", borderRadius: 4 }}>{mem.region}</span>
+        <span style={{ fontSize: 9, color: "rgba(0,0,0,0.2)", fontFamily: "var(--mono)" }}>{getFormat(mem.temperature)}</span>
+        <div style={{ flex: 1 }} />
+        {showScore && mem.fusion_score != null && <span style={{ fontSize: 9, fontFamily: "var(--mono)", color: "#2A8C5A" }}>f:{mem.fusion_score?.toFixed(3)}</span>}
+        {showScore && mem.similarity != null && !mem.fusion_score && <span style={{ fontSize: 9, fontFamily: "var(--mono)", color: "#2A8C5A" }}>s:{mem.similarity?.toFixed(3)}</span>}
+        {mem.retrieval_paths && <span style={{ fontSize: 8, fontFamily: "var(--mono)", color: "#2A8C5A", opacity: 0.6 }}>{mem.retrieval_paths.join("+")}</span>}
+      </div>
+      <div style={{ fontSize: 13, color: "rgba(0,0,0,0.55)", lineHeight: 1.65, marginBottom: 10, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", fontFamily: "var(--sans)" }}>
+        {content.slice(0, 220)}
+      </div>
+      <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+        <SignalDot label="DA" value={da} color={da > 0.4 ? "#2A8C5A" : null} />
+        <SignalDot label="NE" value={ne} color={ne > 0.5 ? "#A68B1E" : null} />
+        <SignalDot label="USE" value={usage} />
+        {mem.retrieval_importance > 0.1 && <SignalDot label="EWC" value={mem.retrieval_importance} color="#2878A8" />}
+        <div style={{ flex: 1 }} />
+        <span style={{ fontSize: 9, color: "rgba(0,0,0,0.2)", fontFamily: "var(--mono)" }}>{mem.source}</span>
+        <span style={{ fontSize: 9, color: "rgba(0,0,0,0.15)", fontFamily: "var(--mono)" }}>{mem.access_count || 0}x</span>
+      </div>
+    </div>
+  );
+}
+
+function DetailDrawer({ mem, onClose, onForget }) {
+  if (!mem) return null;
+  const band = getBand(mem.temperature);
+  const cfg = BAND_CONFIG[band];
+  const sig = mem.signals || {};
+
+  const Field = ({ label, value, accent }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
+      <span style={{ fontSize: 10, color: "rgba(0,0,0,0.3)", fontFamily: "var(--mono)" }}>{label}</span>
+      <span style={{ fontSize: 10, color: accent || "rgba(0,0,0,0.6)", fontFamily: "var(--mono)", maxWidth: "55%", textAlign: "right", wordBreak: "break-word" }}>{value}</span>
+    </div>
+  );
+
+  const Content = ({ label, text }) => text ? (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontSize: 9, color: "rgba(0,0,0,0.25)", fontFamily: "var(--mono)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 5 }}>{label}</div>
+      <div style={{ padding: "10px 12px", background: "rgba(0,0,0,0.02)", borderRadius: 6, fontSize: 12, color: "rgba(0,0,0,0.5)", lineHeight: 1.7, whiteSpace: "pre-wrap", maxHeight: 160, overflowY: "auto", fontFamily: "var(--sans)", borderLeft: `2px solid ${cfg.color}30` }}>{text}</div>
+    </div>
+  ) : null;
+
+  return (
+    <div style={{
+      position: "fixed", top: 0, right: 0, width: 400, height: "100vh",
+      background: "rgba(247,246,241,0.98)", borderLeft: "1px solid rgba(0,0,0,0.06)",
+      backdropFilter: "blur(24px)", zIndex: 100, overflowY: "auto",
+      padding: "24px 20px", display: "flex", flexDirection: "column",
+      boxShadow: "-8px 0 30px rgba(0,0,0,0.04)",
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div>
+          <div style={{ fontSize: 10, fontFamily: "var(--mono)", color: cfg.color, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 2 }}>{band}</div>
+          <div style={{ fontSize: 32, fontWeight: 300, fontFamily: "var(--mono)", color: cfg.color, letterSpacing: -1 }}>{mem.temperature?.toFixed(4)}</div>
+        </div>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(0,0,0,0.2)", cursor: "pointer", fontSize: 22, padding: 8, lineHeight: 1 }}>x</button>
+      </div>
+      <Field label="id" value={mem.id?.slice(0, 16) + "..."} />
+      <Field label="region" value={mem.region} />
+      <Field label="format" value={getFormat(mem.temperature)} />
+      <Field label="source" value={mem.source} />
+      <Field label="accessed" value={`${mem.access_count || 0}x`} />
+      <div style={{ height: 1, background: "rgba(0,0,0,0.05)", margin: "14px 0" }} />
+      <div style={{ fontSize: 9, color: "rgba(0,0,0,0.25)", fontFamily: "var(--mono)", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10 }}>Signals</div>
+      <Field label="DA (relevance)" value={(sig.DA || sig.da || sig.da_relevance || 0).toFixed(4)} accent="#2A8C5A" />
+      <Field label="NE (novelty)" value={(sig.NE || sig.ne || sig.ne_novelty || 0).toFixed(4)} accent="#A68B1E" />
+      <Field label="usage" value={(sig.usage || sig.usage_score || 0).toFixed(4)} />
+      {mem.signal_variance != null && <Field label="uncertainty" value={mem.signal_variance?.toFixed(4)} accent={mem.signal_variance > 0.3 ? "#C4392A" : null} />}
+      {mem.retrieval_importance != null && <Field label="EWC protection" value={mem.retrieval_importance?.toFixed(4)} accent={mem.retrieval_importance > 0.2 ? "#2878A8" : null} />}
+      <Content label="raw" text={mem.raw_content} />
+      <Content label="summary" text={mem.structured_summary} />
+      <Content label="nugget" text={mem.knowledge_nugget} />
+      <Content label="edges" text={mem.entity_edges} />
+      {mem.context && <Content label="context" text={mem.context} />}
+      <button onClick={() => onForget(mem.id)} style={{
+        marginTop: 20, padding: "9px 0", width: "100%", background: "rgba(196,57,42,0.04)",
+        border: "1px solid rgba(196,57,42,0.12)", borderRadius: 6, color: "rgba(196,57,42,0.5)",
+        fontFamily: "var(--mono)", fontSize: 10, cursor: "pointer", letterSpacing: 0.5,
+      }}>void()</button>
+    </div>
+  );
+}
+
+function LogOverlay({ logs, onClose }) {
+  return (
+    <div style={{
+      position: "fixed", bottom: 0, left: 0, right: 0, height: 200,
+      background: "rgba(247,246,241,0.97)", borderTop: "1px solid rgba(0,0,0,0.06)",
+      backdropFilter: "blur(16px)", zIndex: 90, overflowY: "auto", padding: "14px 24px",
+      fontFamily: "var(--mono)", fontSize: 10, lineHeight: 2.2, color: "rgba(0,0,0,0.4)",
+      boxShadow: "0 -4px 20px rgba(0,0,0,0.03)",
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+        <span style={{ color: "#2A8C5A", fontSize: 9, textTransform: "uppercase", letterSpacing: 1.5 }}>Activity log</span>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(0,0,0,0.2)", cursor: "pointer", fontSize: 14 }}>x</button>
+      </div>
+      {logs.map((l, i) => <div key={i} dangerouslySetInnerHTML={{ __html: l }} />)}
+    </div>
+  );
+}
+
+function App() {
+  const [memories, setMemories] = useState([]);
+  const [stats, setStats] = useState({ total: 0, avg_temp: 0, regions: {}, bands: {} });
+  const [selected, setSelected] = useState(null);
+  const [results, setResults] = useState(null);
+  const [logs, setLogs] = useState([]);
+  const [showLog, setShowLog] = useState(false);
+  const [input, setInput] = useState("");
+  const [source, setSource] = useState("direct");
+  const [context, setContext] = useState("");
+  const [query, setQuery] = useState("");
+  const [cycleCount, setCycleCount] = useState(0);
+  const [loading, setLoading] = useState("");
+  const [mode, setMode] = useState("store");
+
+  const log = useCallback((msg) => {
+    const t = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    setLogs(prev => [`<span style="color:rgba(0,0,0,0.2)">${t}</span> ${msg}`, ...prev].slice(0, 200));
+  }, []);
+
+  const refresh = useCallback(async () => {
+    const [s, m] = await Promise.all([api("/stats"), api("/memories?limit=300")]);
+    if (s) setStats(s);
+    if (m) setMemories(m);
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const remember = async () => {
+    if (!input.trim()) return;
+    setLoading("r");
+    const mem = await api("/remember", { method: "POST", body: JSON.stringify({ content: input, source, context }) });
+    if (mem) { log(`<span style="color:#2A8C5A">encode</span> > ${mem.region} <span style="color:rgba(0,0,0,0.3)">${input.slice(0, 50)}...</span>`); setInput(""); setContext(""); }
+    await refresh(); setLoading("");
+  };
+
+  const recall = async () => {
+    if (!query.trim()) return;
+    setLoading("q");
+    const r = await api("/recall", { method: "POST", body: JSON.stringify({ query, top_k: 10 }) });
+    if (r) { setResults(r); setMode("recall"); log(`<span style="color:#A68B1E">recall</span> "${query.slice(0, 40)}" > ${r.length}`); }
+    await refresh(); setLoading("");
+  };
+
+  const consolidate = async (n = 1) => {
+    setLoading("c");
+    for (let i = 0; i < n; i++) {
+      const s = await api("/consolidate", { method: "POST", body: JSON.stringify({}) });
+      if (s) {
+        setCycleCount(c => c + 1);
+        const p = [];
+        if (s.compressed) p.push(`<span style="color:#A68B1E">${s.compressed} compressed</span>`);
+        if (s.migrated) p.push(`<span style="color:#2878A8">${s.migrated} migrated</span>`);
+        if (s.pruned) p.push(`<span style="color:#C4392A">${s.pruned} pruned</span>`);
+        if (s.protected) p.push(`<span style="color:#2A8C5A">${s.protected} protected</span>`);
+        log(`<span style="color:#2A8C5A">sleep ${cycleCount + i + 1}</span> ${p.join(" ") || "decay applied"}`);
+      }
+    }
+    await refresh(); setLoading("");
+  };
+
+  const forget = async (id) => {
+    await api("/forget", { method: "POST", body: JSON.stringify({ memory_id: id }) });
+    log(`<span style="color:#C4392A">void</span> ${id?.slice(0, 8)}`);
+    setSelected(null); await refresh();
+  };
+
+  const prune = async () => {
+    const r = await api("/forget", { method: "POST", body: JSON.stringify({ below_temp: 0.05 }) });
+    if (r?.pruned) log(`<span style="color:#C4392A">prune</span> ${r.pruned} voided`);
+    await refresh();
+  };
+
+  const displayList = mode === "recall" && results ? results : memories;
+
+  return (
+    <div style={{
+      "--accent": "#2A8C5A", "--accent-soft": "rgba(42,140,90,0.08)",
+      "--bg": "#F2F1EC", "--bg-card": "#FAFAF6", "--bg-input": "#F7F6F1",
+      "--fg": "#2C2C28", "--fg2": "rgba(0,0,0,0.5)", "--fg3": "rgba(0,0,0,0.25)",
+      "--border": "rgba(0,0,0,0.06)", "--border-strong": "rgba(0,0,0,0.1)",
+      "--mono": "'JetBrains Mono', 'SF Mono', 'Cascadia Code', monospace",
+      "--sans": "'Inter', 'SF Pro Text', system-ui, -apple-system, sans-serif",
+      fontFamily: "var(--sans)", background: "var(--bg)", color: "var(--fg)", minHeight: "100vh",
+    }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Inter:wght@300;400;500;600&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.08); border-radius: 3px; }
+        textarea::placeholder, input::placeholder { color: rgba(0,0,0,0.18); }
+        input:focus, textarea:focus { outline: none; border-color: rgba(42,140,90,0.3) !important; }
+        button { cursor: pointer; transition: all 0.15s ease; }
+        button:hover { opacity: 0.8; }
+        select { cursor: pointer; }
+      `}</style>
+
+      {/* Header */}
+      <div style={{ padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border)", background: "rgba(250,250,246,0.8)", backdropFilter: "blur(8px)", position: "sticky", top: 0, zIndex: 50 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+          <span style={{ fontFamily: "var(--mono)", fontWeight: 500, fontSize: 14, letterSpacing: 5, color: "var(--accent)", textTransform: "uppercase" }}>memory engine</span>
+          <span style={{ fontFamily: "var(--mono)", fontSize: 9, color: "rgba(0,0,0,0.15)", letterSpacing: 2 }}>v0.1</span>
+        </div>
+        <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+          <span style={{ fontFamily: "var(--mono)", fontSize: 9, color: "rgba(0,0,0,0.2)", marginRight: 4 }}>
+            cycle <span style={{ color: "var(--accent)", fontWeight: 500 }}>{cycleCount}</span>
+          </span>
+          {[1,10,50].map(n => (
+            <button key={n} onClick={() => consolidate(n)} disabled={loading==="c"} style={pillBtn}>
+              {loading==="c" ? "\u00b7" : n===1 ? "sleep()" : "x"+n}
+            </button>
+          ))}
+          <button onClick={prune} style={{...pillBtn, borderColor: "rgba(196,57,42,0.12)", color: "rgba(196,57,42,0.45)"}}>prune()</button>
+          <div style={{ width: 1, height: 14, background: "var(--border)", margin: "0 2px" }} />
+          <button onClick={() => setShowLog(!showLog)} style={{...pillBtn, color: showLog ? "var(--accent)" : "rgba(0,0,0,0.2)"}}>log</button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{ display: "flex", height: "calc(100vh - 49px)" }}>
+
+        {/* Left sidebar */}
+        <div style={{ width: 220, padding: "24px 18px", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 28, flexShrink: 0, overflowY: "auto", background: "rgba(250,250,246,0.5)" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            <Stat label="memories" value={stats.total} />
+            <Stat label="avg temp" value={(stats.avg_temp||0).toFixed(3)} accent={BAND_CONFIG[getBand(stats.avg_temp||0)]?.color} />
+          </div>
+          <div>
+            <div style={{ fontSize: 9, color: "rgba(0,0,0,0.2)", fontFamily: "var(--mono)", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10 }}>Distribution</div>
+            <TempGauge bands={stats.bands||{}} total={stats.total} />
+          </div>
+          <div>
+            <div style={{ fontSize: 9, color: "rgba(0,0,0,0.2)", fontFamily: "var(--mono)", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10 }}>Regions</div>
+            {[["hippocampus","#C86B28"],["neocortex","#2878A8"],["archive","#6858B0"]].map(([r,c]) => (
+              <div key={r} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontSize: 10, color: "rgba(0,0,0,0.35)", fontFamily: "var(--mono)" }}>{r}</span>
+                <span style={{ fontSize: 15, fontWeight: 400, fontFamily: "var(--mono)", color: c }}>{stats.regions?.[r]||0}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Center */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
+          {/* Input */}
+          <div style={{ padding: "16px 24px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
+            <textarea value={input} onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.metaKey && e.key==="Enter") remember(); }}
+              placeholder="encode a memory..."
+              rows={2}
+              style={{ width: "100%", background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 8, padding: "11px 14px", color: "var(--fg)", fontSize: 13, fontFamily: "var(--sans)", resize: "vertical", lineHeight: 1.6 }} />
+            <div style={{ display: "flex", gap: 6, marginTop: 8, alignItems: "center" }}>
+              <select value={source} onChange={e => setSource(e.target.value)} style={fieldStyle}>
+                {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <input value={context} onChange={e => setContext(e.target.value)} placeholder="context..." style={{...fieldStyle, flex: 1}} />
+              <button onClick={remember} disabled={loading==="r"} style={{...pillBtn, background: "var(--accent-soft)", borderColor: "rgba(42,140,90,0.18)", color: "var(--accent)", fontWeight: 500}}>
+                {loading==="r" ? "\u00b7\u00b7\u00b7" : "remember()"}
+              </button>
+            </div>
+          </div>
+
+          {/* Recall */}
+          <div style={{ padding: "10px 24px", borderBottom: "1px solid var(--border)", display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
+            <input value={query} onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => { if (e.key==="Enter") recall(); }}
+              placeholder="recall..."
+              style={{...fieldStyle, flex: 1}} />
+            <button onClick={recall} disabled={loading==="q"} style={pillBtn}>{loading==="q" ? "\u00b7\u00b7\u00b7" : "recall()"}</button>
+            <div style={{ width: 1, height: 14, background: "var(--border)" }} />
+            {["store","recall"].map(m => (
+              <button key={m} onClick={() => setMode(m)} style={{
+                ...pillBtn,
+                color: mode===m ? "var(--accent)" : "rgba(0,0,0,0.2)",
+                borderColor: mode===m ? "rgba(42,140,90,0.15)" : "transparent",
+                background: mode===m ? "var(--accent-soft)" : "transparent",
+              }}>{m}</button>
+            ))}
+          </div>
+
+          {/* Memory list */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "12px 24px 80px" }}>
+            {displayList.length === 0
+              ? <div style={{ textAlign: "center", padding: 60, color: "rgba(0,0,0,0.15)", fontSize: 12, fontFamily: "var(--mono)" }}>{mode==="recall" ? "no results" : "no memories yet"}</div>
+              : displayList.map((m, i) => (
+                <NodeCard key={m.id} mem={m} onClick={setSelected} isSelected={selected?.id===m.id} rank={mode==="recall" ? i+1 : null} showScore={mode==="recall"} />
+              ))
+            }
+          </div>
+        </div>
+      </div>
+
+      {selected && <DetailDrawer mem={selected} onClose={() => setSelected(null)} onForget={forget} />}
+      {showLog && <LogOverlay logs={logs} onClose={() => setShowLog(false)} />}
+    </div>
+  );
+}
+
+const pillBtn = {
+  fontFamily: "var(--mono)", fontSize: 10, padding: "5px 12px",
+  border: "1px solid rgba(0,0,0,0.08)", background: "rgba(0,0,0,0.02)",
+  color: "rgba(0,0,0,0.35)", borderRadius: 5, letterSpacing: 0.3, whiteSpace: "nowrap",
+};
+
+const fieldStyle = {
+  fontFamily: "var(--mono)", fontSize: 11, padding: "7px 11px",
+  border: "1px solid rgba(0,0,0,0.06)", background: "#FAFAF6",
+  color: "#2C2C28", borderRadius: 6,
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

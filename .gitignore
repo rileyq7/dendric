@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+*.egg-info/
+dist/
+build/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data & results
+data/*.jsonl
+results/*.json
+results/*.log
+*.db
+*.sqlite
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Project-specific
+legacy/
+docs_archive/
+data/
+results/
+tests/
+longmemeval/
+scripts/
+*.jsonl
+.pytest_cache/
+mnestic-ui.jsx
+QUICK_REFERENCE.txt
