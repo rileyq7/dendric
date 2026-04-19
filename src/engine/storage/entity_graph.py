@@ -302,6 +302,19 @@ class EntityGraphStore:
         # Normalize with tanh: raw=2.0 → ~0.76, raw=1.0 → ~0.46
         return math.tanh(raw * 0.5)
 
+    # ── Temporal Edges ────────────────────────────────────────────────
+
+    def get_entity_by_name(self, canonical_name: str) -> Optional[UUID]:
+        """Get entity ID by canonical name (any type)."""
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM entities WHERE LOWER(canonical_name) = LOWER(%s) LIMIT 1",
+                (canonical_name,)
+            )
+            row = cur.fetchone()
+        return row[0] if row else None
+
+
     # ── Consolidation ────────────────────────────────────────────────
 
     def consolidate_entity_graph(self, last_consolidation_time=None):

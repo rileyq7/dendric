@@ -60,9 +60,9 @@ Papers → [Entity Extraction] → [Entity Graph] → [Spreading Activation] →
 **Result:** 140% NDCG improvement
 
 ### Batch Embedding (✓ Optimized)
-- 70+ papers/second on M1/M3 Macs
-- 9x faster than single embedding
-- 768-dim nomic-embed-text model
+- OpenAI `text-embedding-3-small`, 1536-dim
+- Native batch API (up to 2048 inputs/call)
+- Requires `OPENAI_API_KEY`
 
 **Result:** 9x faster ingest
 

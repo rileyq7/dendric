@@ -22,7 +22,6 @@ app = Flask(__name__, static_folder="static")
 # Initialize engine
 config = EngineConfig(
     db_url=os.environ.get("DATABASE_URL", "postgresql://localhost:5432/memory_engine"),
-    compression_api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
     goals=[
         "memory engine", "consolidation", "AI infrastructure",
         "startup", "deep tech", "neuroscience", "defence",

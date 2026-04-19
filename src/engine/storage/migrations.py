@@ -184,6 +184,15 @@ def run_migrations(conn):
         cur.execute("""
             ALTER TABLE entity_edges ADD COLUMN IF NOT EXISTS predicate TEXT DEFAULT 'co_occurs';
         """)
+        # Temporal-ordering columns and indexes are dropped — temporal-edge
+        # discovery and temporal_graph_walk were deleted as scaffolding.
+        cur.execute("ALTER TABLE entity_edges DROP COLUMN IF EXISTS temporal_relation;")
+        cur.execute("ALTER TABLE entity_edges DROP COLUMN IF EXISTS valid_at;")
+        cur.execute("ALTER TABLE entity_edges DROP COLUMN IF EXISTS invalid_at;")
+        cur.execute("ALTER TABLE entity_edges DROP COLUMN IF EXISTS source_session;")
+        cur.execute("DROP INDEX IF EXISTS idx_ee_temporal;")
+        cur.execute("DROP INDEX IF EXISTS idx_ee_valid_at;")
+        cur.execute("DROP INDEX IF EXISTS idx_entity_edges_temporal_relation;")
         # Compression output storage
         cur.execute("""
             ALTER TABLE memories ADD COLUMN IF NOT EXISTS knowledge_nuggets JSONB DEFAULT '[]'::jsonb;

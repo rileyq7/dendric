@@ -23,14 +23,14 @@ from .compression import should_compress, compress, COMPRESSION_THRESHOLDS
 from .erosion import tokenize, score_token_importance, erode_tokens
 from ..retrieval.vector import vector_recall
 from ..retrieval.keyword import keyword_recall
-from ..retrieval.associative import associative_recall, build_context
-from ..retrieval.fusion import fuse_results
+from ..retrieval.associative import spreading_activation_recall, build_context
+from ..retrieval.fusion import fuse_results, apply_lifecycle_modulation
 from ..retrieval.temporal import detect_temporal_query, temporal_rerank, ensure_temporal_diversity
 from ..retrieval.graph import graph_recall
 from ..retrieval.temporal_decomposer import decompose as decompose_temporal, compute_temporal_hint
 from ..storage.postgres import PostgresStore
 from ..storage.entity_graph import EntityGraphStore
-from ..embeddings.embed import embed, embed_query, get_model, get_embed_dim
+from ..embeddings.embed import embed, embed_query, get_model, get_embed_dim, assert_model_matches
 from ..utils import extract_session_id, parse_context_date
 from .entity_extraction import extract_entities, ENTITY_STOPWORDS
 
@@ -40,6 +40,41 @@ logger = logging.getLogger(__name__)
 _ENTITY_STOPWORDS = ENTITY_STOPWORDS
 
 
+# Question words / verbs / vague terms that are never useful as entity seeds.
+_CONCEPT_TERM_STOPWORDS = {
+    "how", "many", "much", "what", "when", "where", "which", "who", "why",
+    "did", "does", "do", "was", "were", "have", "has", "had", "is", "are",
+    "the", "a", "an", "my", "me", "i", "we", "you", "they", "it", "this", "that",
+    "and", "or", "but", "for", "with", "from", "to", "of", "in", "on", "at", "by",
+    "all", "any", "some", "ago", "long", "pass", "passed", "take", "took", "get",
+    "got", "between", "since", "more", "less", "than", "been", "being",
+    "buy", "bought", "work", "worked", "make", "made", "go", "went", "see", "saw",
+    "receive", "received", "meet", "met", "need", "needed", "days", "weeks",
+    "months", "years", "day", "week", "month", "year", "time", "times",
+    "last", "first", "next", "new", "old", "one", "two", "three",
+    "about", "thing", "things", "item", "items",
+} | ENTITY_STOPWORDS
+
+
+def _extract_query_concept_terms(query: str) -> list:
+    """
+    Extract salient content words from a query to seed graph_recall when no
+    proper-noun entities were found. Returns lowercased terms of length >= 4
+    that survive a stopword filter. Used for common-noun questions like
+    "how many model kits did I buy" where `extract_entities` returns [].
+    """
+    tokens = re.findall(r"[A-Za-z][A-Za-z'\-]*", query.lower())
+    terms = []
+    seen = set()
+    for tok in tokens:
+        if len(tok) < 4 or tok in _CONCEPT_TERM_STOPWORDS:
+            continue
+        if tok not in seen:
+            seen.add(tok)
+            terms.append(tok)
+    return terms[:6]
+
+
 class MemoryEngine:
 
     def __init__(self, config: Optional[EngineConfig] = None):
@@ -47,8 +82,9 @@ class MemoryEngine:
         self.store = PostgresStore(self.config.db_url)
         self._cycle_count = 0
 
-        # Initialize embedding model
+        # Initialize embedding model and verify config/runtime/schema agree.
         get_model(self.config.embed_model)
+        assert_model_matches(self.config.embed_model, self.config.embed_dim)
 
 
     # ── REMEMBER ─────────────────────────────────────────────────
@@ -255,7 +291,11 @@ class MemoryEngine:
             )
 
             memories.append(mem)
-            if link_entities and entities:
+            # Queue every memory for entity linking when link_entities is on,
+            # even if no entities were extracted — _link_entities adds the
+            # persona, so memories with no other entities still get the
+            # universal owner edge.
+            if link_entities:
                 entity_work.append((mem.id, entities, session_id))
 
         # ── Step 3: Single DB transaction for all memory inserts ──
@@ -267,15 +307,9 @@ class MemoryEngine:
             logger.info(f"Linking entities for {len(entity_work)} memories...")
             entity_graph = EntityGraphStore(self.store.conn, autocommit=False)
             for mem_id, entities, session_id in entity_work:
-                entity_ids = []
-                for name, etype, canonical in entities:
-                    eid = entity_graph.upsert_entity(canonical, etype, name)
-                    entity_graph.update_entity_session(eid, session_id)
-                    entity_graph.insert_memory_entity(mem_id, eid, salience=0.5)
-                    entity_ids.append(eid)
-                for i in range(len(entity_ids)):
-                    for j in range(i + 1, len(entity_ids)):
-                        entity_graph.upsert_entity_edge(entity_ids[i], entity_ids[j])
+                # Route through the same helper as remember() so persona
+                # injection is consistent across both ingest paths.
+                self._link_entities(entity_graph, mem_id, entities, session_id)
             self.store.conn.commit()
 
         logger.info(f"Batch ingested {len(memories)}/{len(items)} memories")
@@ -295,18 +329,55 @@ class MemoryEngine:
 
         overfetch = top_k * self.config.overfetch_multiplier
 
-        # Four parallel retrieval paths
-        vec_results = vector_recall(query_emb, self.store, top_k=overfetch, min_temp=min_temp)
-        kw_results = keyword_recall(query, self.store, top_k=overfetch, min_temp=min_temp)
+        # Four parallel retrieval paths — each independently ablatable.
+        vec_results = (
+            vector_recall(query_emb, self.store, top_k=overfetch, min_temp=min_temp)
+            if self.config.enable_vector_path else []
+        )
+        kw_results = (
+            keyword_recall(query, self.store, top_k=overfetch, min_temp=min_temp)
+            if self.config.enable_keyword_path else []
+        )
 
-        ctx = build_context()
-        assoc_results = associative_recall(ctx, self.store, top_k=5)
-
-        # Path 4: Entity graph walk
+        # Path 4: Entity graph walk — extract entities first so the spreading-
+        # activation path below can use the same seeds.
         query_entity_tuples = extract_entities(query)
         query_entity_names = [canonical for _, _, canonical in query_entity_tuples]
-        graph_results = graph_recall(
-            query_entity_names, self.store, top_k=overfetch,
+        # If no proper-noun entities extracted (common for everyday-object
+        # questions like "how many model kits did I buy"), fall back to
+        # salient nouns so graph_recall's fuzzy LIKE can still match.
+        if not query_entity_names:
+            query_entity_names = _extract_query_concept_terms(query)
+        graph_results = (
+            graph_recall(query_entity_names, self.store, top_k=overfetch)
+            if self.config.enable_graph_path else []
+        )
+
+        # Path 3 (real spreading activation): seed at query entities, propagate
+        # through the entity graph with decay, return memories linked to the
+        # most-activated nodes. Replaces the old "similarity to recent context"
+        # implementation. Same query_entity_names used as seeds.
+        # Spreading-activation path. The archive_trigger_threshold lets very
+        # strongly activated nodes pull archived memories — déjà-vu. Without
+        # it, archived memories are unreachable; with it, they only surface
+        # when association is strong (not on weak hops or persona fallback).
+        archive_trigger = (
+            self.config.archive_trigger_threshold
+            if self.config.archive_trigger_threshold > 0.0
+            else None
+        )
+        assoc_results = (
+            spreading_activation_recall(
+                query_entity_names,
+                self.store,
+                top_k=overfetch,
+                min_temp=min_temp,
+                persona=self.config.persona,
+                persona_seed_activation=self.config.persona_seed_activation,
+                persona_fallback=self.config.persona_fallback_seed,
+                archive_trigger_threshold=archive_trigger,
+            )
+            if self.config.enable_associative_path else []
         )
 
         logger.debug(
@@ -318,7 +389,10 @@ class MemoryEngine:
 
         # Temporal decomposition: for temporal queries, also retrieve using
         # stripped event queries to improve recall on time-anchored questions
-        temporal_decomp = decompose_temporal(query, question_timestamp)
+        if self.config.enable_temporal_decomposition:
+            temporal_decomp = decompose_temporal(query, question_timestamp)
+        else:
+            temporal_decomp = {"is_temporal": False, "event_queries": [], "temporal_op": None, "temporal_params": {}}
         extra_vec = []
         extra_kw = []
         if temporal_decomp["is_temporal"]:
@@ -350,16 +424,40 @@ class MemoryEngine:
             graph_results=graph_results,
         )
 
-        # Temporal re-ranking (Path 4) — only activates for temporal queries
-        temporal_info = detect_temporal_query(query, question_timestamp)
-        if temporal_info['is_temporal']:
-            fused = temporal_rerank(
-                fused, temporal_info, question_timestamp,
-                temporal_weight=self.config.temporal_weight,
-                rrf_k=self.config.rrf_k,
+        # Lifecycle modulation: multiply each fused_score by a bounded
+        # function of (temperature, DA, NE). Hot goal-relevant memories tilt
+        # upward; off-curve novelty tilts down. The modulation is bounded so
+        # an overwhelming semantic match on a cold memory still surfaces.
+        # This is the change that turns the lifecycle from a stored model
+        # into a retrieval bias.
+        if self.config.enable_lifecycle_modulation:
+            fused = apply_lifecycle_modulation(
+                fused,
+                temp_lift=self.config.mod_temp_lift,
+                da_lift=self.config.mod_da_lift,
+                ne_penalty=self.config.mod_ne_penalty,
+                mod_min=self.config.mod_min,
+                mod_max=self.config.mod_max,
             )
-            fused = ensure_temporal_diversity(fused, temporal_info, top_k=top_k * 2)
 
+        # Temporal re-ranking (Path 4) — only activates for temporal queries
+        if self.config.enable_temporal_rerank:
+            temporal_info = detect_temporal_query(query, question_timestamp)
+            if temporal_info['is_temporal']:
+                fused = temporal_rerank(
+                    fused, temporal_info, question_timestamp,
+                    temporal_weight=self.config.temporal_weight,
+                    rrf_k=self.config.rrf_k,
+                )
+                fused = ensure_temporal_diversity(fused, temporal_info, top_k=top_k * 2)
+        else:
+            temporal_info = {"is_temporal": False}
+
+        # Slice to top_k. RRF + lifecycle modulation already produced the
+        # final ordering (modulation lifts hot/goal-relevant, dampens
+        # off-curve novelty). Late-tier scaffolding (two-phase, temporal-
+        # graph, contiguity) was deleted — the design has four retrieval
+        # paths plus déjà-vu, all merged via fusion. No post-fusion appends.
         results = fused[:top_k]
 
         # Attach temporal hint for the answer model
@@ -380,11 +478,14 @@ class MemoryEngine:
             if hint and results:
                 results[0]["_temporal_hint"] = hint
 
-        # Reheat accessed memories + update EWC
+        # Reheat accessed memories + update EWC.
+        # All write-back is gated by config.recall_mutates_state. When False
+        # (benchmarking mode), recall is read-only so the same query set
+        # produces identical results across runs and is order-independent.
         top_k_ids = [r["id"] for r in results]
         all_ids = [r["id"] for r in fused]
 
-        if reheat:
+        if reheat and self.config.recall_mutates_state:
             for result in results:
                 mem = self.store.get(result["id"])
                 if mem:
@@ -392,20 +493,101 @@ class MemoryEngine:
                     # Update result with reheated temp
                     result["temperature"] = mem.temperature
 
-        # Log retrieval for EWC
-        try:
-            self.store.log_retrieval(query, query_emb, all_ids[:50], top_k_ids)
-        except Exception as e:
-            logger.warning(f"Failed to log retrieval: {e}")
+        if self.config.recall_mutates_state:
+            # Log retrieval for EWC
             try:
-                self.store.conn.rollback()
-            except Exception:
-                pass
+                self.store.log_retrieval(query, query_emb, all_ids[:50], top_k_ids)
+            except Exception as e:
+                logger.warning(f"Failed to log retrieval: {e}")
+                try:
+                    self.store.conn.rollback()
+                except Exception:
+                    pass
 
-        # Update retrieval importance for all memories
-        self._update_retrieval_importance(top_k_ids)
+            # Bounded importance update — only top_k hits and a small decay sample.
+            self._update_retrieval_importance(top_k_ids)
 
         return results
+
+    def _effective_reheat_amount(self, current_temp: float, match_strength: float) -> float:
+        """Compute the reheat delta a memory WOULD receive given its match strength.
+
+        Mirrors the formula in _reheat but is read-only — used for activation-
+        based ranking before the slice. Same formula across both call sites
+        guarantees the ranking matches the post-reheat temperature.
+        """
+        coldness_factor = 1.0 - current_temp
+        similarity_factor = max(0.0, match_strength)
+        return self.config.base_reheat + (
+            self.config.coldness_reheat_factor * coldness_factor * similarity_factor
+        )
+
+    def _rank_by_effective_temperature(
+        self,
+        candidates: List[dict],
+        top_k: int,
+    ) -> List[dict]:
+        """Rank a tier-union by post-reheat (effective) temperature.
+
+        Each tier produces results with different score scales (RRF score,
+        cosine similarity, binary). To rank fairly across tiers, we use the
+        only common currency: the activation-equation temperature each memory
+        WOULD have after this retrieval reheats it. Tiers contribute by
+        providing a match_strength signal; activation does the ranking.
+
+        Match strength source priority:
+          1. similarity (vector path, two_phase)
+          2. fusion_score (RRF output) — normalized to [0,1] via 1/(1+rank/k)
+          3. 0.5 (default for tier hits without explicit score)
+        """
+        if not candidates:
+            return []
+
+        # Deduplicate by id — keep highest-match-strength version of any dupe
+        best_by_id: Dict[str, dict] = {}
+        for r in candidates:
+            mid = r.get("id")
+            if mid is None:
+                continue
+            ms = self._extract_match_strength(r)
+            r["_match_strength"] = ms
+            if mid not in best_by_id or ms > best_by_id[mid].get("_match_strength", 0.0):
+                best_by_id[mid] = r
+
+        # Fetch current temperature for each unique memory (one DB round-trip
+        # per id; could be batched but the union is small — top_k * a few).
+        for mid, r in best_by_id.items():
+            mem = self.store.get(mid)
+            current_temp = mem.temperature if mem else float(r.get("temperature", 0.0))
+            ms = r["_match_strength"]
+            r["_effective_temperature"] = current_temp + self._effective_reheat_amount(current_temp, ms)
+            # Keep current temp visible for downstream consumers (and so the
+            # answer model sees the un-mutated value when state is read-only).
+            r.setdefault("temperature", current_temp)
+
+        ranked = sorted(
+            best_by_id.values(),
+            key=lambda r: (r["_effective_temperature"], r["_match_strength"]),
+            reverse=True,
+        )
+        return ranked[:top_k]
+
+    @staticmethod
+    def _extract_match_strength(r: dict) -> float:
+        """Extract a [0,1] match strength signal from a result dict.
+
+        Different tiers populate different fields. Order matters: we trust
+        explicit similarity first, then RRF fusion_score (already on roughly
+        the right scale), then default to a moderate value for binary tier hits.
+        """
+        if "similarity" in r and r["similarity"] is not None:
+            return float(r["similarity"])
+        if "fusion_score" in r and r["fusion_score"] is not None:
+            # Fusion scores are usually small (~0.01-0.1 for RRF with k=60).
+            # Map to [0,1] with a soft scale: 0.05 → ~0.5, 0.2 → ~0.9.
+            fs = float(r["fusion_score"])
+            return min(1.0, fs / (fs + 0.05))
+        return 0.5
 
     def _reheat(self, mem: Memory, similarity: float):
         """Reheat proportional to coldness — cold memories spike harder."""
@@ -424,22 +606,30 @@ class MemoryEngine:
         self.store.update(mem)
 
     def _update_retrieval_importance(self, top_k_ids: List[str]):
-        """Update EWC importance for all memories based on this retrieval."""
-        all_mems = self.store.get_all(limit=500)
-        for mem in all_mems:
-            was_in_top_k = mem.id in top_k_ids
+        """Update EWC importance for retrieved memories.
+
+        Previously this scanned up to 500 memories per query — O(N) per recall
+        with two failure modes: (a) latency and write contention scale with corpus
+        size, and (b) the per-query decay made the importance landscape a function
+        of query throughput rather than time. Now: only retrieved memories get
+        positive updates here. Decay happens during consolidation, where it
+        belongs and runs once per cycle rather than once per query.
+        """
+        if not top_k_ids:
+            return
+        for mem_id in top_k_ids:
+            mem = self.store.get(mem_id)
+            if mem is None:
+                continue
             new_importance = update_retrieval_importance(
-                was_in_top_k,
+                True,
                 mem.retrieval_importance,
                 learning_rate=self.config.importance_learning_rate,
                 decay_rate=self.config.importance_decay_rate,
             )
-            if was_in_top_k:
-                mem.retrieval_hits += 1
-            mem.retrieval_importance = new_importance
             self.store.update_fields(mem.id, {
                 "retrieval_importance": new_importance,
-                "retrieval_hits": mem.retrieval_hits,
+                "retrieval_hits": mem.retrieval_hits + 1,
             })
 
     # ── CONSOLIDATE ──────────────────────────────────────────────
@@ -483,10 +673,18 @@ class MemoryEngine:
         pruned_edges = entity_graph.consolidate_entity_graph(last_consol)
         stats["edges_pruned"] = pruned_edges
 
+
         for mem in memories:
             # 1. Update GABA inhibition: increases with disuse
             cycles_since_access = self._cycles_since_access(mem, now)
             mem.gaba_inhibition = min(0.95, 1.0 - np.exp(-0.3 * cycles_since_access))
+
+            # 1a. Decay retrieval importance once per cycle (was per-query;
+            # see _update_retrieval_importance for rationale).
+            mem.retrieval_importance = max(
+                0.0,
+                mem.retrieval_importance * (1.0 - self.config.importance_decay_rate),
+            )
 
             # 1b. Recompute DA from retrieval history (no outcome/rating tracking yet).
             mem.da_relevance = compute_da(
@@ -520,7 +718,8 @@ class MemoryEngine:
                 ne_novelty=mem.ne_novelty,
                 gaba_inhibition=mem.gaba_inhibition,
                 spreading_activation=sa * self.config.spreading_activation_weight,
-                noise=True,  # Add stochasticity to consolidation
+                noise=self.config.activation_use_noise,
+                use_gane=self.config.activation_use_gane,
             )
 
             # 3. Update signal histories
@@ -658,6 +857,7 @@ class MemoryEngine:
                 "signal_variance": uncertainty,
                 "usage_score": usage,
                 "last_consolidated": now,
+                "retrieval_importance": mem.retrieval_importance,
             }
             if mem.token_weights is not None:
                 update["token_weights"] = json.dumps(mem.token_weights)
@@ -665,10 +865,6 @@ class MemoryEngine:
             self.store.update_fields(mem.id, update)
 
             stats["processed"] += 1
-
-        # 9. Aggregate synthesis for high-fan-out entities
-        agg_count = self._synthesize_aggregates()
-        stats["aggregates_created"] = agg_count
 
         return stats
 
@@ -680,145 +876,52 @@ class MemoryEngine:
         hours = (now - mem.last_accessed).total_seconds() / 3600
         return max(0, int(hours / 8))  # ~3 cycles per day
 
+    def _with_persona(self, entities):
+        """Append the configured persona to an entity list if not already present.
+
+        First-person memory streams have an implicit owner. Linking every
+        memory to a persona node makes that fact structural — spreading
+        activation seeded at the persona reaches all memories in its stream,
+        and queries that mention the persona by name (where memories say
+        'I' / 'my') can resolve via the persona node.
+
+        Persona is stored with a low salience (0.2 vs 0.5 for explicit entities)
+        so the link is real but doesn't dominate per-memory entity weight.
+        """
+        persona = (self.config.persona or "").strip().lower()
+        if not persona:
+            return entities
+        if any(c.lower() == persona for _, _, c in entities):
+            return entities
+        return list(entities) + [(self.config.persona, "named", persona)]
+
     def _link_entities(self, entity_graph, memory_id, entities, session_id):
-        """Upsert entities, link to memory, and track session."""
+        """Upsert entities, link to memory, and track session.
+
+        Persona is special: it's the implicit owner, not a peer entity. It
+        gets a memory→persona link (so spreading activation can fall back to
+        it for persona-only queries) but NOT co-occurrence edges to other
+        entities. Without this exception, every entity ends up edge-connected
+        to the persona, and activation from any entity hops via persona to
+        everything — destroying the specificity of spreading activation.
+        """
+        entities = self._with_persona(entities)
+        persona_canonical = (self.config.persona or "").strip().lower()
         entity_ids = []
+        non_persona_ids = []  # for co-occurrence edges (excludes persona)
         for name, etype, canonical in entities:
             eid = entity_graph.upsert_entity(canonical, etype, name)
             entity_graph.update_entity_session(eid, session_id)
-            entity_graph.insert_memory_entity(memory_id, eid, salience=0.5)
+            is_persona = canonical == persona_canonical
+            salience = 0.2 if is_persona else 0.5
+            entity_graph.insert_memory_entity(memory_id, eid, salience=salience)
             entity_ids.append(eid)
-        # Create co-occurrence edges between entities in same memory
-        for i in range(len(entity_ids)):
-            for j in range(i + 1, len(entity_ids)):
-                entity_graph.upsert_entity_edge(entity_ids[i], entity_ids[j])
-
-    def _synthesize_aggregates(self, min_sessions: int = 3) -> int:
-        """Create or update aggregate memories for high-fan-out entities.
-
-        For entities mentioned across many sessions, build a single retrievable
-        memory that summarizes all instances — so aggregation queries can be
-        answered within top_k=10 without needing to retrieve every mention.
-        """
-        import psycopg2.extras
-        entity_graph = EntityGraphStore(self.store.conn)
-        high_fan = entity_graph.get_high_fan_entities(min_sessions=min_sessions)
-
-        if not high_fan:
-            return 0
-
-        count = 0
-        for entity in high_fan:
-            eid = entity["id"]
-            canonical = entity["canonical_name"]
-            etype = entity["entity_type"]
-            session_ids = entity.get("session_ids") or []
-
-            # Skip non-named entities, short names, and stopwords
-            if etype not in ("named", "numeric"):
-                continue
-            if len(canonical) < 3 or canonical in _ENTITY_STOPWORDS:
-                continue
-            mention_count = entity.get("mention_count", 0)
-
-            # Get all linked memory IDs
-            memory_ids = entity_graph.get_memories_for_entity(eid)
-            if not memory_ids:
-                continue
-
-            # Fetch memory content and dates
-            instances = []
-            with self.store.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                cur.execute("""
-                    SELECT id, raw_content, knowledge_nugget, context, source
-                    FROM memories
-                    WHERE id = ANY(%s)
-                    ORDER BY created_at
-                """, (memory_ids,))
-                rows = cur.fetchall()
-
-            for row in rows:
-                # Skip other aggregates
-                if row.get("source") == "aggregate":
-                    continue
-                content = row.get("raw_content") or row.get("knowledge_nugget") or ""
-                if not content:
-                    continue
-                ctx = row.get("context", "")
-                dt = parse_context_date(ctx)
-                date_str = dt.strftime("%Y/%m/%d") if dt else "unknown date"
-                # Truncate to keep aggregate compact
-                snippet = content[:150].replace("\n", " ").strip()
-                instances.append(f"- ({date_str}) {snippet}")
-
-            if not instances:
-                continue
-
-            # Build aggregate text
-            n_instances = len(instances)
-            n_sessions = len(session_ids)
-            session_list = ", ".join(sorted(session_ids)[:10])
-            instances_text = "\n".join(instances[:20])  # Cap at 20 to limit size
-
-            aggregate_text = (
-                f"[Aggregate: {canonical}] "
-                f"Entity type: {etype}. "
-                f"Mentioned {mention_count} times across {n_sessions} sessions "
-                f"({session_list}).\n"
-                f"Total distinct instances: {n_instances}.\n"
-                f"Instances:\n{instances_text}"
-            )
-
-            # Check for existing aggregate
-            existing_id = None
-            with self.store.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                cur.execute("""
-                    SELECT id FROM memories
-                    WHERE source = 'aggregate' AND context LIKE %s
-                    LIMIT 1
-                """, (f"aggregate:{canonical}%",))
-                row = cur.fetchone()
-                if row:
-                    existing_id = row["id"]
-
-            aggregate_embedding = embed(aggregate_text, self.config.embed_model)
-
-            if existing_id:
-                # Update existing aggregate
-                self.store.update_fields(existing_id, {
-                    "raw_content": aggregate_text,
-                    "embedding": aggregate_embedding,
-                    "temperature": 0.8,
-                })
-            else:
-                # Create new aggregate memory
-                now = datetime.now(timezone.utc)
-                mem = Memory(
-                    raw_content=aggregate_text,
-                    temperature=0.8,
-                    region="neocortex",
-                    da_relevance=0.5,
-                    ne_novelty=0.5,
-                    usage_score=0.0,
-                    embedding=aggregate_embedding,
-                    source="aggregate",
-                    context=f"aggregate:{canonical}",
-                    created_at=now,
-                    last_accessed=now,
-                    access_times=[now],
-                    access_count=0,
-                    compression_level="aggregate",
-                    co_entities=[canonical],
-                )
-                self.store.store(mem)
-                count += 1
-
-            logger.info(
-                f"{'Updated' if existing_id else 'Created'} aggregate for "
-                f"'{canonical}': {n_instances} instances, {n_sessions} sessions"
-            )
-
-        return count
+            if not is_persona:
+                non_persona_ids.append(eid)
+        # Co-occurrence edges between non-persona entities only.
+        for i in range(len(non_persona_ids)):
+            for j in range(i + 1, len(non_persona_ids)):
+                entity_graph.upsert_entity_edge(non_persona_ids[i], non_persona_ids[j])
 
     def _best_content(self, mem: Memory) -> str:
         return (

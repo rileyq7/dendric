@@ -172,12 +172,15 @@ class PostgresStore:
     def vector_search(
         self, query_embedding: List[float], top_k: int = 20, min_temp: float = 0.0
     ) -> List[Dict[str, Any]]:
+        # Archive is dormant-but-reachable: NOT served by normal retrieval,
+        # only by the associative déjà-vu trigger. So vector excludes it.
         with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
                 SELECT *, 1 - (embedding <=> %s::vector) as similarity
                 FROM memories
                 WHERE temperature >= %s
                   AND embedding IS NOT NULL
+                  AND region != 'archive'
                 ORDER BY embedding <=> %s::vector
                 LIMIT %s
             """, (query_embedding, min_temp, query_embedding, top_k))
@@ -202,11 +205,13 @@ class PostgresStore:
             # Two-tier FTS: try strict AND first, fall back to OR if too few results.
             # AND is precise but fails when any query term is absent from the doc.
             # OR is broad but ts_rank sorts by term overlap so best matches come first.
+            # Archive excluded — same rationale as vector_search.
             cur.execute("""
                 SELECT *, ts_rank(content_tsv, plainto_tsquery('english', %s)) as score
                 FROM memories
                 WHERE content_tsv @@ plainto_tsquery('english', %s)
                   AND temperature >= %s
+                  AND region != 'archive'
                 ORDER BY ts_rank(content_tsv, plainto_tsquery('english', %s)) DESC
                 LIMIT %s
             """, (query_text, query_text, min_temp, query_text, top_k))
@@ -227,6 +232,7 @@ class PostgresStore:
                         FROM memories
                         WHERE content_tsv @@ to_tsquery('english', %s)
                           AND temperature >= %s
+                          AND region != 'archive'
                           AND id::text != ALL(%s)
                         ORDER BY ts_rank(content_tsv, to_tsquery('english', %s)) DESC
                         LIMIT %s
@@ -248,6 +254,7 @@ class PostgresStore:
                     FROM memories
                     WHERE raw_content ILIKE %s
                       AND temperature >= %s
+                      AND region != 'archive'
                       AND id::text != ALL(%s)
                     LIMIT %s
                 """, (pattern, min_temp, list(seen), top_k))

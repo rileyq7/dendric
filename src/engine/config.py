@@ -64,12 +64,6 @@ class EngineConfig:
     session_decay: float = 0.85
     overfetch_multiplier: int = 3
 
-    # Compression model
-    compression_model: str = "claude-haiku-4-5-20251001"
-    compression_api_key: str = field(default_factory=lambda: os.environ.get(
-        "ANTHROPIC_API_KEY", ""
-    ))
-
     # Spreading activation weight in temperature formula
     spreading_activation_weight: float = 0.3
 
@@ -78,3 +72,79 @@ class EngineConfig:
 
     # Novelty gate threshold
     novelty_gate: float = 0.15
+
+    # Reheat / EWC feedback during recall.
+    # When False, recall is read-only with respect to memory state — required
+    # for stable benchmark runs (otherwise query order and run count silently
+    # mutate the importance/temperature landscape). Default True for normal use.
+    recall_mutates_state: bool = field(default_factory=lambda: os.environ.get(
+        "DENDRIC_RECALL_MUTATES_STATE", "1"
+    ).lower() in ("1", "true", "yes"))
+
+    # Cap on how many memories the per-query EWC update touches. The previous
+    # implementation rewrote up to 500 memories per query (O(N) per recall),
+    # which both bottlenecks throughput and creates query-throughput-coupled
+    # decay. Now we only touch the top_k hits and an additional sample of
+    # decay candidates capped here.
+    ewc_update_max_decay: int = 0  # 0 = decay only via consolidation, not per-query
+
+    # ── Déjà-vu archive trigger ────────────────────────────────────────
+    # When spreading activation reaches a node strongly enough, also pull
+    # archived memories linked to that node. Archived memories are
+    # otherwise unreachable by normal retrieval (region != 'archive' filter
+    # in vector/keyword paths), but a strong-enough association evokes them
+    # back into awareness — déjà vu. Threshold is on per-entity activation
+    # value after spreading; 0.0 disables.
+    archive_trigger_threshold: float = 0.7
+
+    # ── Persona ────────────────────────────────────────────────────────
+    # Canonical name of the implicit owner of this memory stream. When set,
+    # every ingested memory is automatically linked to this entity in the
+    # graph — first-person episodic memory has an implicit owner by
+    # construction (DA/NE/GABA only mean something relative to *whose*
+    # goals/novelty/redundancy). For an agent's own memory, this is the
+    # agent's identifier; for a chat persona, it's the persona name.
+    # Empty string disables (default — back-compat with existing usage).
+    persona: str = ""
+    # Activation a query gets when seeded at the persona node. Lower than
+    # other-entity seeds because "this is about me" is weaker evidence —
+    # it's true of every memory.
+    persona_seed_activation: float = 0.5
+    # Whether spreading activation should fall back to the persona when no
+    # query entities are in the graph. This is what makes queries like
+    # "Has Jamie had X?" reach memories that say "I had X."
+    persona_fallback_seed: bool = True
+
+    # ── Lifecycle modulation at rank ──────────────────────────────────
+    # Post-RRF, each candidate's fused_score is multiplied by a bounded
+    # modulation function of its lifecycle state. This is what makes the
+    # biological signals load-bearing at retrieval — without it, the
+    # system stores temperature and DA/NE/GABA but never USES them at
+    # query time. The bias is a tilt, not a filter: defaults below put
+    # modulation in roughly [0.7, 1.5], so a strong RRF match on a cold
+    # memory can still beat a weak match on a hot one.
+    enable_lifecycle_modulation: bool = True
+    mod_temp_lift: float = 0.4       # hot memories (temp=1) get +40% before clamp
+    mod_da_lift: float = 0.3         # goal-relevant memories (DA=1) get +30%
+    mod_ne_penalty: float = 0.3      # off-curve novelty penalized up to -30%
+    mod_min: float = 0.7             # floor — strong RRF can still surface cold
+    mod_max: float = 1.6             # ceiling — modulation tilts, doesn't dominate
+
+    # ── Ablation flags ────────────────────────────────────────────────
+    # All default True so production behavior is unchanged unless explicitly
+    # ablated. Each flag is read at the call site of the corresponding
+    # component. Used by the ablation harness (src/scripts/ablate.py).
+
+    # Retrieval paths
+    enable_vector_path: bool = True
+    enable_keyword_path: bool = True
+    enable_associative_path: bool = True
+    enable_graph_path: bool = True
+
+    # Temporal helpers
+    enable_temporal_decomposition: bool = True   # decompose_temporal extra-vec/extra-kw
+    enable_temporal_rerank: bool = True          # detect_temporal_query + temporal_rerank
+
+    # Activation equation stages (in compute_temperature)
+    activation_use_gane: bool = True             # stage 5: GANE feedback
+    activation_use_noise: bool = True            # stage 7: arousal-modulated noise

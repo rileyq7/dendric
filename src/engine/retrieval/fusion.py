@@ -5,6 +5,11 @@ Reference: Hindsight's TEMPR architecture uses RRF for multi-path fusion.
 
 RRF score for memory m = sum(weight_path / (rrf_k + rank_in_path))
 Memories appearing in multiple paths get boosted.
+
+After fusion, each candidate's score is optionally modulated by its
+lifecycle state (temperature, DA, NE) via apply_lifecycle_modulation.
+That's what makes the biological signals load-bearing at rank — without
+it, the system stores lifecycle state but never uses it in retrieval.
 """
 
 import math
@@ -14,6 +19,59 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 
 from ..utils import extract_session_id as _extract_session_id, parse_context_date as _parse_context_date
+
+
+# NE inverted-U params — must match the activation equation in core/activation.py
+# so the system has ONE consistent novelty-value curve across consolidation
+# and retrieval. Optimal NE = 0.65 (asymmetric peak from dual-receptor dynamics).
+_NE_MU = 0.65
+_NE_SIGMA = 0.18
+
+
+def _inverted_u(ne: float, mu: float = _NE_MU, sigma: float = _NE_SIGMA) -> float:
+    """Returns 1.0 at the peak (NE=mu), falling to ~0 at the tails."""
+    return math.exp(-((ne - mu) ** 2) / (2 * sigma ** 2))
+
+
+def apply_lifecycle_modulation(
+    results: List[Dict[str, Any]],
+    temp_lift: float = 0.4,
+    da_lift: float = 0.3,
+    ne_penalty: float = 0.3,
+    mod_min: float = 0.7,
+    mod_max: float = 1.6,
+) -> List[Dict[str, Any]]:
+    """Multiply each result's fusion_score by a bounded lifecycle modulation.
+
+    modulation = (1 + temp_lift * temp)
+               × (1 + da_lift * da)
+               × (1 - ne_penalty * (1 - inverted_u(ne)))
+    clamped to [mod_min, mod_max]
+
+    Bias is multiplicative and bounded so a strong RRF match on a cold memory
+    can still surface — it's a tilt, not a filter. Re-sorts in place by the
+    new score and returns the same list. Stamps `_modulation` on each result
+    for telemetry.
+    """
+    for r in results:
+        temp = float(r.get("temperature", 0.5))
+        signals = r.get("signals", {}) or {}
+        da = float(signals.get("DA", r.get("da_relevance", 0.3)))
+        ne = float(signals.get("NE", r.get("ne_novelty", 0.5)))
+
+        mod = (
+            (1.0 + temp_lift * temp)
+            * (1.0 + da_lift * da)
+            * (1.0 - ne_penalty * (1.0 - _inverted_u(ne)))
+        )
+        mod = max(mod_min, min(mod_max, mod))
+        r["_modulation"] = round(mod, 4)
+        base = float(r.get("fusion_score", 0.0))
+        r["_unmodulated_fusion_score"] = base
+        r["fusion_score"] = round(base * mod, 6)
+
+    results.sort(key=lambda x: x.get("fusion_score", 0.0), reverse=True)
+    return results
 
 
 _AGGREGATION_PATTERN = re.compile(

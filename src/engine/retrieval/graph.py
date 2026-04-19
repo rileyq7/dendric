@@ -17,6 +17,8 @@ from typing import List, Dict, Any, Optional
 
 import psycopg2.extras
 
+from ..storage.entity_graph import EntityGraphStore
+
 logger = logging.getLogger(__name__)
 
 
@@ -119,6 +121,8 @@ def graph_recall(
 
         # Step 4: Find memories attached to reached entities
         reached_list = list(reached_ids)
+        # Archive excluded — only the spreading-activation déjà-vu trigger
+        # is allowed to surface archived memories.
         cur.execute("""
             SELECT
                 m.*,
@@ -126,6 +130,7 @@ def graph_recall(
             FROM memories m
             JOIN memory_entities me ON me.memory_id = m.id
             WHERE me.entity_id::text = ANY(%s)
+              AND m.region != 'archive'
             GROUP BY m.id
             ORDER BY m.temperature DESC
             LIMIT %s
@@ -147,3 +152,4 @@ def graph_recall(
 
     results.sort(key=lambda x: x['graph_score'], reverse=True)
     return results[:top_k]
+

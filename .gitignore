@@ -44,3 +44,5 @@ scripts/
 .pytest_cache/
 mnestic-ui.jsx
 QUICK_REFERENCE.txt
+ablation_results/
+.claude/

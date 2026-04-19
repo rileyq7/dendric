@@ -222,8 +222,35 @@ def compute_temporal_hint(
 
     dated_memories.sort(key=lambda x: x[0])
 
+    def _match_event_memory(event_text: str):
+        """Return the earliest dated memory whose content contains salient words from event_text.
+
+        Only returns a match if at least 2 content words (>3 chars, non-stopword) overlap.
+        This prevents the hint from anchoring to arbitrary memories that happen to be retrieved.
+        """
+        if not event_text:
+            return None
+        stop = {"the", "and", "for", "with", "that", "this", "from", "have", "was", "were",
+                "did", "was", "has", "had", "been", "about", "into", "than", "then", "when",
+                "where", "what", "who", "whom", "which", "why", "how", "any", "all", "some"}
+        words = {w.lower() for w in re.findall(r"[A-Za-z]{4,}", event_text) if w.lower() not in stop}
+        if len(words) < 2:
+            return None
+        best = None
+        for dt, m in dated_memories:
+            content = (m.get("raw_content") or m.get("content") or "").lower()
+            overlap = sum(1 for w in words if w in content)
+            if overlap >= 2:
+                if best is None or dt < best[0]:
+                    best = (dt, m)
+        return best
+
     if temporal_op == "time_distance" and dated_memories:
-        event_date = dated_memories[0][0]
+        event_text = temporal_params.get("event", "")
+        match = _match_event_memory(event_text)
+        if match is None:
+            return None  # Don't fabricate a hint from unrelated memories
+        event_date = match[0]
         delta = reference_date - event_date
         unit = temporal_params.get("unit", "days")
         if unit in ("week", "weeks"):
@@ -241,8 +268,13 @@ def compute_temporal_hint(
         )
 
     if temporal_op in ("time_between", "time_relative") and len(dated_memories) >= 2:
-        first_date = dated_memories[0][0]
-        last_date = dated_memories[-1][0]
+        event_a = temporal_params.get("event_a", "")
+        event_b = temporal_params.get("event_b", "")
+        match_a = _match_event_memory(event_a)
+        match_b = _match_event_memory(event_b)
+        if match_a is None or match_b is None:
+            return None  # Don't fabricate a span when we can't identify both events
+        first_date, last_date = sorted([match_a[0], match_b[0]])
         delta = last_date - first_date
         unit = temporal_params.get("unit", "days")
         if unit in ("week", "weeks"):

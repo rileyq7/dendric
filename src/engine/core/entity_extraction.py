@@ -79,12 +79,30 @@ ACADEMIC_STOPWORDS = {
     'large', 'small', 'high', 'low', 'new', 'first', 'proposed',
 }
 
+# Common English verbs that frequently appear sentence-initial as imperatives
+# ("Hang the painting", "Store the leftovers", "Plan ahead"). These have no
+# verb-shape suffix to catch them with morphology, so they need to be listed.
+# Kept small and tied directly to the extractor — NOT a 100+ word catch-all.
+_COMMON_IMPERATIVE_VERBS = {
+    "hang", "store", "plan", "make", "take", "give", "find", "get", "got",
+    "put", "set", "use", "add", "open", "close", "stop", "start",
+    "keep", "let", "leave", "move", "turn", "show", "tell", "ask",
+    "buy", "sell", "send", "bring", "call", "pick", "pull", "push",
+    "drop", "pass", "wait", "look", "watch", "check", "clean",
+    "cook", "wash", "read", "write", "draw", "paint", "build", "fix",
+    "try", "see", "hear", "feel", "think", "know", "want", "need",
+    "love", "hate", "hope", "wish", "had", "have", "did", "do", "say",
+    "said", "tell", "told", "let", "made", "took", "gave", "found",
+    "saw", "seen", "went", "going", "came", "back", "yes", "well",
+}
+
 # Authoritative merged stopword set used to filter all entity extraction.
 ENTITY_STOPWORDS = (
     _BASE_STOPWORDS
     | ACADEMIC_STOPWORDS
     | STOPWORDS
     | _ENGINE_ENTITY_STOPWORDS
+    | _COMMON_IMPERATIVE_VERBS
 )
 
 
@@ -137,23 +155,115 @@ def extract_entities(text: str, known_entities: Optional[List[str]] = None) -> L
 
 
 def _regex_extract(text: str, known_entities: Optional[List[str]] = None) -> List[Tuple[str, str, str]]:
-    """Regex/heuristic entity extraction."""
+    """Regex/heuristic entity extraction.
+
+    Sentence-initial capitalization is grammatical, not semantic. A single-token
+    capitalized word at sentence start ("Hang", "Plan", "Store") is almost
+    always a regular verb/noun, not a named entity. We previously caught this
+    with a 100+ word blocklist in engine.py — that's a band-aid that rots.
+
+    Real fix here: track sentence-initial positions, then for single-token
+    capitalized matches that ARE sentence-initial, require independent evidence
+    of proper-noun status (appears non-sentence-initially elsewhere in the same
+    text, or matches a known proper-noun set).
+    """
     entities = []
     tokens = text.split()
 
-    # 1. Named entities: sequences of capitalized words
+    # Identify sentence-initial token indices: index 0, plus any token whose
+    # predecessor ended in . ! or ? (period as full-stop, not abbreviation).
+    sentence_initial: set = {0}
+    for k in range(1, len(tokens)):
+        prev = tokens[k - 1].rstrip(")'\"")
+        if prev and prev[-1] in ".!?":
+            sentence_initial.add(k)
+
+    # Pre-compute non-sentence-initial capitalized tokens (lowercased, stripped
+    # of punctuation). These are reliable proper-noun seeds — a word that's
+    # capitalized mid-sentence is almost always a name.
+    confirmed_proper: set = set()
+    for k, tok in enumerate(tokens):
+        if k in sentence_initial:
+            continue
+        if tok and tok[0].isupper() and not tok.isupper():
+            confirmed_proper.add(tok.lower().strip(".,;:!?'\""))
+
+    _CONNECTORS = {"of", "the", "and", "for", "at", "in", "on", "de", "la", "von", "van", "di", "du"}
+    _LEADING_NOISE = {"the", "a", "an", "besides", "also", "here", "there"}
+    _KNOWN_PROPER = KNOWN_MODELS | KNOWN_DATASETS | KNOWN_VENUES
+
     i = 0
     while i < len(tokens):
         if tokens[i] and tokens[i][0].isupper() and not tokens[i].isupper():
-            # Collect consecutive capitalized tokens
+            start_index = i
+            # If sentence-initial token is a verb/stopword that happens to be
+            # capitalized by grammar, don't include it in the name chain — but
+            # do allow the chain to continue from the next token. This catches
+            # "Visited the Museum of Modern Art" → "Museum of Modern Art".
+            head_lower = tokens[i].lower().strip(".,;:!?'\"")
+            head_is_grammar = (
+                start_index in sentence_initial
+                and (head_lower in ENTITY_STOPWORDS
+                     or head_lower.endswith(("ing", "ed", "ly", "ize", "ise")))
+            )
+            if head_is_grammar:
+                # Skip the head; continue scanning from i+1 if it could start a
+                # new chain. But since the next token is rarely capitalized
+                # (after a verb), just advance one and let the outer loop re-scan.
+                i += 1
+                continue
+
             name_parts = [tokens[i]]
             j = i + 1
-            while j < len(tokens) and tokens[j] and tokens[j][0].isupper() and not tokens[j-1][-1] in ".,;:!?":
-                name_parts.append(tokens[j])
-                j += 1
+            while j < len(tokens) and tokens[j] and tokens[j-1][-1] not in ".,;:!?":
+                tok = tokens[j]
+                if tok[0].isupper() and not tok.isupper():
+                    name_parts.append(tok)
+                    j += 1
+                elif tok.lower().strip(".,;:!?") in _CONNECTORS and j + 1 < len(tokens) \
+                        and tokens[j + 1] and tokens[j + 1][0].isupper() and not tokens[j + 1].isupper():
+                    name_parts.append(tok)
+                    j += 1
+                else:
+                    break
             name = ' '.join(name_parts).rstrip(".,;:!?")
-            canonical = name.lower().strip()
+            canonical = name.lower().strip().strip("'\"")
+            canonical_tokens = canonical.split()
+            while canonical_tokens and canonical_tokens[-1] in _CONNECTORS:
+                canonical_tokens.pop()
+            while canonical_tokens and canonical_tokens[0] in _LEADING_NOISE:
+                canonical_tokens.pop(0)
+            canonical = " ".join(canonical_tokens)
             alpha_count = sum(1 for c in canonical if c.isalpha())
+
+            # Single-token sentence-initial capitalization needs to clear an
+            # extra bar — sentence-start capitalization is grammar, not
+            # semantics. Accept if any of these hold:
+            #   (a) the token appears capitalized again non-sentence-initially
+            #       elsewhere in the same text (real proper nouns repeat),
+            #   (b) it's in our known proper-noun set (models/datasets/venues),
+            #   (c) it doesn't look verb-shaped AND isn't a stopword
+            #       (this is the lenient default — real names like "Mango",
+            #       "Tamiya", "Vallejo" pass; verbs like "Hang", "Plan",
+            #       "Store", "Make" get caught by the verb-shape and stopword
+            #       filters above).
+            is_single_token_sentence_initial = (
+                start_index in sentence_initial
+                and len(canonical_tokens) == 1
+            )
+            if is_single_token_sentence_initial:
+                head = canonical_tokens[0] if canonical_tokens else ""
+                if head in confirmed_proper or head in _KNOWN_PROPER:
+                    pass  # confirmed
+                elif head in ENTITY_STOPWORDS:
+                    i = j
+                    continue
+                elif head.endswith(("ing", "ed", "ly", "ize", "ise")):
+                    # verb-shaped; skip
+                    i = j
+                    continue
+                # else: lenient accept — the stopword set is the actual filter
+
             if (canonical and canonical not in ENTITY_STOPWORDS
                     and len(canonical) >= 2 and alpha_count >= 2):
                 entities.append((name, 'named', canonical))

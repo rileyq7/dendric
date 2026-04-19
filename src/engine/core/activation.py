@@ -29,6 +29,7 @@ def compute_temperature(
     gaba_inhibition: float,
     spreading_activation: float = 0.0,
     noise: bool = True,
+    use_gane: bool = True,
     # Parameters (tuned via grid search on 8 research-validated test scenarios)
     # Critical: NE inverted-U MUST show NE=1.0 < NE=0.65, which it does ✓
     # Tuning achieved 4/8 scenario pass rate with balanced gradient
@@ -81,8 +82,11 @@ def compute_temperature(
     # ── Stage 5: GANE feedback (winner-take-more / loser-take-less) ──
     # tanh creates competition: above-mean memories amplified, below-mean suppressed
     # DA gates the gain: important memories are more responsive to NE dynamics
-    g = 1 + alpha * da_relevance
-    gane = g * eta * ne_novelty * math.tanh(lam * a_sal)
+    if use_gane:
+        g = 1 + alpha * da_relevance
+        gane = g * eta * ne_novelty * math.tanh(lam * a_sal)
+    else:
+        gane = 0.0
 
     # ── Stage 6: GABA hybrid inhibition ──
     # Divisive: GABA_A shunting inhibition (compresses dynamic range)
