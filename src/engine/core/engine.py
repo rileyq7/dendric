@@ -81,6 +81,7 @@ class MemoryEngine:
         self.config = config or EngineConfig()
         self.store = PostgresStore(self.config.db_url)
         self._cycle_count = 0
+        self._last_recall_paths: Optional[dict] = None
 
         # Initialize embedding model and verify config/runtime/schema agree.
         get_model(self.config.embed_model)
@@ -387,6 +388,36 @@ class MemoryEngine:
             f"(entities={query_entity_names})"
         )
 
+        # Diagnostic: stash per-path pre-fusion contribution so callers (the
+        # bench debug dump) can see which path produced each result and at
+        # what rank. Keyed by memory id.
+        self._last_recall_paths = {
+            "query": query,
+            "query_entities": list(query_entity_names),
+            "counts": {
+                "vector": len(vec_results),
+                "keyword": len(kw_results),
+                "associative": len(assoc_results),
+                "graph": len(graph_results),
+            },
+            "per_memory": {},
+        }
+        for path_name, path_results in (
+            ("vector", vec_results),
+            ("keyword", kw_results),
+            ("associative", assoc_results),
+            ("graph", graph_results),
+        ):
+            for rank, r in enumerate(path_results):
+                mid = str(r.get("id"))
+                slot = self._last_recall_paths["per_memory"].setdefault(
+                    mid, {}
+                )
+                slot[path_name] = {
+                    "rank": rank,
+                    "score": float(r.get("score", r.get("similarity", 0.0)) or 0.0),
+                }
+
         # Temporal decomposition: for temporal queries, also retrieve using
         # stripped event queries to improve recall on time-anchored questions
         if self.config.enable_temporal_decomposition:
@@ -506,6 +537,13 @@ class MemoryEngine:
 
             # Bounded importance update — only top_k hits and a small decay sample.
             self._update_retrieval_importance(top_k_ids)
+
+        # Attach per-path diagnostic to each returned result. Harmless when
+        # ignored; the bench debug dump reads it through.
+        per_mem = self._last_recall_paths["per_memory"]
+        for r in results:
+            mid = str(r.get("id"))
+            r["_path_debug"] = per_mem.get(mid, {})
 
         return results
 
