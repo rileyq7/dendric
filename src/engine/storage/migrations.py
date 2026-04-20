@@ -208,13 +208,19 @@ def run_migrations(conn):
         """)
         # Migrate vector columns to 1536-dim (from old 768-dim nomic model).
         # Old embeddings are incompatible, so truncate and drop+recreate columns.
+        #
+        # IMPORTANT: pgvector stores the declared dimension N directly in
+        # atttypmod (so vector(1536) → atttypmod=1536). Old code here checked
+        # against 1540, which is wrong, and silently TRUNCATEd every boot.
+        # That's a destructive bug for any long-lived deployment. Now we
+        # only fire the migration when the column dim is set AND not 1536.
         cur.execute("""
             DO $$ BEGIN
                 IF EXISTS (
                     SELECT 1 FROM pg_attribute a
                     JOIN pg_class c ON a.attrelid = c.oid
                     WHERE c.relname = 'memories' AND a.attname = 'embedding'
-                    AND a.atttypmod != -1 AND a.atttypmod != 1540
+                    AND a.atttypmod > 0 AND a.atttypmod != 1536
                 ) THEN
                     TRUNCATE memories CASCADE;
                     TRUNCATE archive;

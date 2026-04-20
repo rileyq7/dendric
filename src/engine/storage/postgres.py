@@ -465,22 +465,31 @@ def _mem_to_params(mem: Memory) -> dict:
     if mem.embedding is not None:
         embedding = np.array(mem.embedding, dtype=np.float32)
 
+    # Signal computations sometimes return numpy.float32 (cosine_similarity
+    # over numpy arrays). psycopg2 doesn't know how to adapt those, so coerce
+    # to native Python floats at the storage boundary.
+    def _f(x):
+        return float(x) if x is not None else None
+
+    def _flist(xs):
+        return [float(x) for x in xs] if xs else xs
+
     return {
         "id": mem.id,
         "raw_content": mem.raw_content,
         "structured_summary": mem.structured_summary,
         "knowledge_nugget": mem.knowledge_nugget,
         "entity_edges": mem.entity_edges,
-        "temperature": mem.temperature,
+        "temperature": _f(mem.temperature),
         "region": mem.region,
-        "da_relevance": mem.da_relevance,
-        "ne_novelty": mem.ne_novelty,
-        "usage_score": mem.usage_score,
-        "da_history": mem.da_history,
-        "ne_history": mem.ne_history,
-        "signal_variance": mem.signal_variance,
+        "da_relevance": _f(mem.da_relevance),
+        "ne_novelty": _f(mem.ne_novelty),
+        "usage_score": _f(mem.usage_score),
+        "da_history": _flist(mem.da_history),
+        "ne_history": _flist(mem.ne_history),
+        "signal_variance": _f(mem.signal_variance),
         "retrieval_hits": mem.retrieval_hits,
-        "retrieval_importance": mem.retrieval_importance,
+        "retrieval_importance": _f(mem.retrieval_importance),
         "embedding": embedding,
         "created_at": mem.created_at,
         "last_accessed": mem.last_accessed,
@@ -500,7 +509,7 @@ def _mem_to_params(mem: Memory) -> dict:
         "token_weights": json.dumps(mem.token_weights) if mem.token_weights else None,
         "knowledge_nuggets": json.dumps(mem.knowledge_nuggets) if mem.knowledge_nuggets else None,
         "last_compressed_at": mem.last_compressed_at,
-        "compression_temperature": mem.compression_temperature,
+        "compression_temperature": _f(mem.compression_temperature),
         "metadata": json.dumps(mem.metadata),
     }
 
