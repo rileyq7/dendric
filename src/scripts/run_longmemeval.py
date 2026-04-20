@@ -384,37 +384,13 @@ def answer_question(
 
     # Aggregation boost: targeted keyword searches for subject nouns
     # This catches mentions scattered across sessions that vector similarity misses.
-    #
-    # IMPORTANT: keyword_search returns raw ts_rank scores in roughly [0, 1+],
-    # while engine.recall returns RRF fusion scores in roughly [0.01, 0.10].
-    # Without rescaling, the bypass scores swamp the proper fusion scores at
-    # the dedup-sort step below, displacing genuinely-relevant results.
-    # We tag bypass results with a small synthetic fusion_score that places
-    # them just below the lowest fused score, so they fill empty slots
-    # without displacing legitimate top-fusion hits. The relative ts_rank
-    # ordering within the bypass set is preserved.
     if is_aggregation:
-        # Floor for bypass scores: the minimum fusion_score in the proper
-        # fused set, so bypass hits sort below all real fused hits but
-        # above zero (so they survive the final sort).
-        proper_fusion_scores = [
-            r.get('fusion_score') for r in all_results
-            if r.get('fusion_score') is not None
-        ]
-        bypass_ceiling = (min(proper_fusion_scores) * 0.5) if proper_fusion_scores else 0.001
         subject_keywords = _extract_subject_keywords(question)
         for kw in subject_keywords[:3]:
             try:
                 kw_results = engine.store.keyword_search(kw, top_k=top_k * 3, min_temp=0.0)
-                # Preserve relative ranking within bypass: linearly compress
-                # raw ts_rank scores into [bypass_ceiling/2, bypass_ceiling].
-                if kw_results:
-                    raw_max = max((r.get('score') or 0.0) for r in kw_results) or 1.0
                 for r in kw_results:
                     if r.get('id') not in seen_ids:
-                        raw = float(r.get('score') or 0.0)
-                        r['fusion_score'] = bypass_ceiling * (0.5 + 0.5 * (raw / raw_max))
-                        r.setdefault('retrieval_paths', []).append('bypass_keyword')
                         seen_ids.add(r['id'])
                         all_results.append(r)
             except Exception as e:
