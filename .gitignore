@@ -38,11 +38,20 @@ docs_archive/
 data/
 results/
 tests/
-longmemeval/
-scripts/
 *.jsonl
 .pytest_cache/
 mnestic-ui.jsx
 QUICK_REFERENCE.txt
 ablation_results/
 .claude/
+
+# Bench output: keep harness code + analysis docs tracked, ignore generated runs.
+# Scripts under src/scripts/ ARE tracked. Top-level scripts/ is a different path
+# we don't currently use; if it ever exists, decide then.
+longmemeval/*.jsonl
+longmemeval/*.jsonl.eval-results-*
+longmemeval/*.json
+longmemeval/*.log
+longmemeval/debug/*.json
+# Top-level scripts/ — legacy ad-hoc dir, not src/scripts/
+/scripts/
