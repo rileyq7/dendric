@@ -40,6 +40,7 @@ def apply_lifecycle_modulation(
     ne_penalty: float = 0.3,
     mod_min: float = 0.7,
     mod_max: float = 1.6,
+    archive_modulation_override: float = 1.0,
 ) -> List[Dict[str, Any]]:
     """Multiply each result's fusion_score by a bounded lifecycle modulation.
 
@@ -52,19 +53,30 @@ def apply_lifecycle_modulation(
     can still surface — it's a tilt, not a filter. Re-sorts in place by the
     new score and returns the same list. Stamps `_modulation` on each result
     for telemetry.
+
+    archive_modulation_override: déjà-vu firings are themselves a strong
+    signal (entity activation crossed threshold), so we don't want to
+    double-penalize their low temperature. When this is != 1.0 and a result
+    is tagged 'associative_archive', its modulation is set to this value
+    instead of the computed one. Default 1.0 disables the override.
     """
     for r in results:
-        temp = float(r.get("temperature", 0.5))
-        signals = r.get("signals", {}) or {}
-        da = float(signals.get("DA", r.get("da_relevance", 0.3)))
-        ne = float(signals.get("NE", r.get("ne_novelty", 0.5)))
+        is_archive = "associative_archive" in (r.get("retrieval_paths") or [])
 
-        mod = (
-            (1.0 + temp_lift * temp)
-            * (1.0 + da_lift * da)
-            * (1.0 - ne_penalty * (1.0 - _inverted_u(ne)))
-        )
-        mod = max(mod_min, min(mod_max, mod))
+        if is_archive and archive_modulation_override != 1.0:
+            mod = archive_modulation_override
+        else:
+            temp = float(r.get("temperature", 0.5))
+            signals = r.get("signals", {}) or {}
+            da = float(signals.get("DA", r.get("da_relevance", 0.3)))
+            ne = float(signals.get("NE", r.get("ne_novelty", 0.5)))
+            mod = (
+                (1.0 + temp_lift * temp)
+                * (1.0 + da_lift * da)
+                * (1.0 - ne_penalty * (1.0 - _inverted_u(ne)))
+            )
+            mod = max(mod_min, min(mod_max, mod))
+
         r["_modulation"] = round(mod, 4)
         base = float(r.get("fusion_score", 0.0))
         r["_unmodulated_fusion_score"] = base
@@ -99,6 +111,7 @@ def fuse_results(
     query: str = "",
     graph_results: Optional[List[Dict[str, Any]]] = None,
     graph_weight: float = 1.4,
+    archive_rrf_boost: float = 1.0,
 ) -> List[Dict[str, Any]]:
     scores = {}  # memory_id -> {score, data, paths}
 
@@ -126,10 +139,23 @@ def fuse_results(
     for rank, result in enumerate(associative_results):
         mid = result["id"]
         rrf_score = associative_weight / (rrf_k + rank + 1)
+        # Archive memories only ever reach the fused pool via the
+        # associative_archive path. They're single-path by construction,
+        # so they always lose RRF to multi-path active-region results.
+        # Boost the archive contribution so strongly-activated déjà-vu
+        # hits can actually surface in top-k.
+        path_tags = result.get("retrieval_paths") or ["associative"]
+        if "associative_archive" in path_tags and archive_rrf_boost != 1.0:
+            rrf_score *= archive_rrf_boost
         if mid not in scores:
             scores[mid] = {"score": 0.0, "data": result, "paths": []}
         scores[mid]["score"] += rrf_score
-        scores[mid]["paths"].append("associative")
+        # Preserve the déjà-vu tag if the associative path marked this as
+        # an archive-triggered hit. Without this the downstream path list
+        # strips 'associative_archive' → 'associative', hiding the signal.
+        for tag in path_tags:
+            if tag not in scores[mid]["paths"]:
+                scores[mid]["paths"].append(tag)
 
     for rank, result in enumerate(graph_results or []):
         mid = result["id"]

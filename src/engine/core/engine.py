@@ -215,22 +215,26 @@ class MemoryEngine:
         self,
         items: List[Dict[str, str]],
         link_entities: bool = True,
+        novelty_window: int = 200,
     ) -> List[dict]:
         """Batch-ingest multiple memories: one embedding call, one DB transaction.
 
-        Each item: {"content": str, "source": str, "context": str}
+        Each item: {"content": str, "source": str, "context": str,
+                    "created_at": datetime (optional, for backdated imports)}
         link_entities: If True, extract and link entities (slower but better retrieval).
+        novelty_window: Max recent embeddings to compare against for NE/GABA.
+            Without this cap the inner loop is O(n²) and a 50k-item batch would
+            take days. 200 matches the biological framing — novelty is a
+            *local* recency signal, not a global corpus property.
         Returns list of memory dicts.
         """
         from ..embeddings.embed import embed_batch as _embed_batch
+        from collections import deque
 
         if not items:
             return []
 
-        now = datetime.now(timezone.utc)
-        hour = now.hour
-        tod = "night" if hour < 6 else "morning" if hour < 12 else "afternoon" if hour < 18 else "evening"
-        dow = now.strftime("%A").lower()
+        default_now = datetime.now(timezone.utc)
 
         # ── Step 1: Batch embed all content via OpenAI API ──
         texts = [item["content"] for item in items]
@@ -242,19 +246,33 @@ class MemoryEngine:
         memories = []
         entity_work = []  # (mem_id, entities, session_id) for deferred entity linking
 
-        # Seed novelty/redundancy context with already-stored recent embeddings;
-        # new items in this batch then become context for subsequent items.
-        all_embeddings = list(self.store.get_recent_embeddings(limit=50))
+        # Sliding-window novelty context. Seeded with stored recent embeddings;
+        # new items push onto the deque, which drops the oldest when capped.
+        # This keeps NE/GABA O(window × n) instead of O(n²) — essential for
+        # batch imports of thousands of items (Claude chat history, etc).
+        all_embeddings: deque = deque(
+            self.store.get_recent_embeddings(limit=min(50, novelty_window)),
+            maxlen=novelty_window,
+        )
 
         for item, content_embedding in zip(items, embeddings):
             content = item["content"]
             source = item.get("source", "direct")
             context = item.get("context", "")
 
+            # Per-item timestamp — defaults to now, but backdated imports pass
+            # real historical datetimes so the memory is born with correct age.
+            item_ts = item.get("created_at", default_now)
+            if item_ts.tzinfo is None:
+                item_ts = item_ts.replace(tzinfo=timezone.utc)
+            hour = item_ts.hour
+            tod = "night" if hour < 6 else "morning" if hour < 12 else "afternoon" if hour < 18 else "evening"
+            dow = item_ts.strftime("%A").lower()
+
             da = compute_da(access_count=0, avg_outcome=0.0, user_rating=0.0, goal_alignment=0.0)
             if all_embeddings:
-                ne = compute_ne(content_embedding, all_embeddings, age_days=0.001)
-                gaba = compute_gaba(content_embedding, all_embeddings, age_days=0.001)
+                ne = compute_ne(content_embedding, list(all_embeddings), age_days=0.001)
+                gaba = compute_gaba(content_embedding, list(all_embeddings), age_days=0.001)
             else:
                 ne = 0.8
                 gaba = 0.1
@@ -285,7 +303,7 @@ class MemoryEngine:
                 da_history=[da], ne_history=[ne], signal_variance=0.5,
                 embedding=content_embedding, source=source, context=context,
                 time_of_day=tod, day_of_week=dow,
-                created_at=now, last_accessed=now, access_times=[now], access_count=0,
+                created_at=item_ts, last_accessed=item_ts, access_times=[item_ts], access_count=0,
                 compression_level="raw",
                 tokens_original=len(content.split()), tokens_current=len(content.split()),
                 co_entities=entity_canonicals,
@@ -453,6 +471,7 @@ class MemoryEngine:
             top_k=top_k,
             query=query,
             graph_results=graph_results,
+            archive_rrf_boost=getattr(self.config, "archive_rrf_boost", 1.0),
         )
 
         # Lifecycle modulation: multiply each fused_score by a bounded
@@ -469,6 +488,9 @@ class MemoryEngine:
                 ne_penalty=self.config.mod_ne_penalty,
                 mod_min=self.config.mod_min,
                 mod_max=self.config.mod_max,
+                archive_modulation_override=getattr(
+                    self.config, "archive_modulation_override", 1.0
+                ),
             )
 
         # Temporal re-ranking (Path 4) — only activates for temporal queries

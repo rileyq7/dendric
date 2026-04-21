@@ -97,6 +97,24 @@ class EngineConfig:
     # value after spreading; 0.0 disables.
     archive_trigger_threshold: float = 0.7
 
+    # Archive memories only ever appear on the associative path (other paths
+    # filter region='archive'). Single-path results always lose the RRF
+    # comparison to multi-path active-region results — so without a boost,
+    # déjà-vu hits are structurally unable to surface in top-k regardless of
+    # how strongly the entity was activated. This multiplier compensates:
+    # applied to each archive hit's RRF contribution before fusion sum.
+    # ~1.8 tuned to put the strongest archive hit (rank 0 of associative)
+    # into the middle of a typical top-10 without dominating.
+    archive_rrf_boost: float = 1.8
+
+    # Lifecycle modulation normally penalizes cold memories (archive memories
+    # by definition have temp ≤ 0.15). A déjà-vu firing is itself a strong
+    # signal — entity activation crossed threshold — so we trust it rather
+    # than double-penalizing the low temperature. This value OVERRIDES the
+    # computed modulation for archive-tagged results; set to 1.0 to disable
+    # the override (restore normal cold-penalty behavior).
+    archive_modulation_override: float = 1.3
+
     # ── Persona ────────────────────────────────────────────────────────
     # Canonical name of the implicit owner of this memory stream. When set,
     # every ingested memory is automatically linked to this entity in the

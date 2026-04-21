@@ -55,3 +55,8 @@ longmemeval/*.log
 longmemeval/debug/*.json
 # Top-level scripts/ — legacy ad-hoc dir, not src/scripts/
 /scripts/
+
+# Personal data — Claude exports, any other user-data dumps. Never commit.
+data-*.zip
+*.export.json
+*.export.zip
