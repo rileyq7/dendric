@@ -1,0 +1,62 @@
+[
+  {
+    "query": "What city did I visit for the neuroscience conference?",
+    "gold_context_matches": [
+      "Lisbon"
+    ]
+  },
+  {
+    "query": "What's the name of my daughter's piano teacher?",
+    "gold_context_matches": [
+      "Harrington"
+    ]
+  },
+  {
+    "query": "Which medication am I taking for migraines?",
+    "gold_context_matches": [
+      "topiramate"
+    ]
+  },
+  {
+    "query": "What was the bug that broke the Friday deploy?",
+    "gold_context_matches": [
+      "users.email_lower"
+    ]
+  },
+  {
+    "query": "When is my parents' anniversary?",
+    "gold_context_matches": [
+      "September 14"
+    ]
+  },
+  {
+    "query": "What car did I test drive last weekend?",
+    "gold_context_matches": [
+      "Rivian R1S"
+    ]
+  },
+  {
+    "query": "Who is my primary care doctor now?",
+    "gold_context_matches": [
+      "Ostrowski"
+    ]
+  },
+  {
+    "query": "What's the wifi password at the Tahoe cabin?",
+    "gold_context_matches": [
+      "ManzanitaRidge42"
+    ]
+  },
+  {
+    "query": "Which book did Priya recommend at book club?",
+    "gold_context_matches": [
+      "Overstory"
+    ]
+  },
+  {
+    "query": "What's my climbing gym membership expiration?",
+    "gold_context_matches": [
+      "Dogpatch Boulders"
+    ]
+  }
+]

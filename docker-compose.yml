@@ -1,0 +1,57 @@
+# Dendric reproducibility stack.
+#
+# Two services:
+#   db      — Postgres + pgvector, seeded volume persists between runs
+#   dendric — the Python runtime; mounts src/ read-write for iteration
+#
+# Usage (see REPRODUCE.md for the full recipe):
+#   docker compose build
+#   docker compose run --rm dendric python -m src.scripts.seed_synthetic_corpus
+#   docker compose run --rm dendric python -m src.scripts.recall_at_k \
+#       --corpus meridian_deep \
+#       --db postgresql://postgres:postgres@db:5432/synthetic \
+#       --annotations data/synthetic_gold.json \
+#       --k 5,10,25
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: dendric
+    ports:
+      - "5433:5432"  # host 5433 → container 5432; avoids conflict w/ local Postgres
+    volumes:
+      - dendric_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  dendric:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # OPENAI_API_KEY must be provided by caller — never bake into image.
+      # Either export it in your shell before `docker compose run`, or use
+      # an .env file in this directory (NOT committed).
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Container talks to the db service by name, not by localhost.
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/dendric
+    volumes:
+      # Mount source read-write so you can edit locally and re-run
+      # without rebuilding the image. Data mounted read-only — corpus
+      # gold files shouldn't be mutated by the harness.
+      - ./src:/app/src
+      - ./data:/app/data:ro
+      - ./docs:/app/docs:ro
+      # Harness results land here so they survive container teardown.
+      - ./ablation_results:/app/ablation_results
+    working_dir: /app
+
+volumes:
+  dendric_pg_data:

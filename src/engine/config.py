@@ -166,3 +166,71 @@ class EngineConfig:
     # Activation equation stages (in compute_temperature)
     activation_use_gane: bool = True             # stage 5: GANE feedback
     activation_use_noise: bool = True            # stage 7: arousal-modulated noise
+
+
+def plain_rag_config(db_url: str, persona: str = "") -> "EngineConfig":
+    """Baseline config: vector-only retrieval, no lifecycle modulation,
+    no associative/graph/keyword paths, no temporal decomposition, no
+    archive trigger. This is what standard RAG looks like — cosine over
+    embeddings and nothing else. The corpus ingest still runs (memories
+    still get stored, entities still extracted) — only the RETRIEVAL
+    stack is stripped down. That keeps the comparison fair: same data
+    in the DB, different retrieval strategies on top.
+
+    Used by src/scripts/recall_at_k.py --config plain_rag for the
+    'does our architecture earn its complexity' baseline.
+    """
+    return EngineConfig(
+        db_url=db_url,
+        persona=persona,
+        recall_mutates_state=False,
+        # Kill everything except vector
+        enable_keyword_path=False,
+        enable_associative_path=False,
+        enable_graph_path=False,
+        enable_temporal_decomposition=False,
+        enable_temporal_rerank=False,
+        enable_lifecycle_modulation=False,
+        # Belt-and-braces: even if a path accidentally fires, zero weights
+        # mean it contributes nothing to fusion.
+        keyword_weight=0.0,
+        associative_weight=0.0,
+        graph_weight=0.0,
+        # Disable archive boost and déjà-vu too — plain RAG has no concept
+        # of region-aware retrieval.
+        archive_rrf_boost=1.0,
+        archive_trigger_threshold=0.0,
+    )
+
+
+PATH_NAMES = ("vector", "keyword", "associative", "graph")
+
+
+def leave_one_out_config(
+    disabled_path: str, db_url: str, persona: str = "",
+) -> "EngineConfig":
+    """Full config with exactly one retrieval path disabled.
+
+    Used by the path-ablation harness to isolate each path's marginal
+    contribution. Everything else (lifecycle, déjà-vu, temporal, archive
+    boost) stays on, so the delta attributes to *just* the toggled path.
+
+    disabled_path must be one of 'vector', 'keyword', 'associative', 'graph'.
+    """
+    if disabled_path not in PATH_NAMES:
+        raise ValueError(
+            f"disabled_path must be one of {PATH_NAMES}, got {disabled_path!r}"
+        )
+    overrides = {
+        "enable_vector_path": True,
+        "enable_keyword_path": True,
+        "enable_associative_path": True,
+        "enable_graph_path": True,
+    }
+    overrides[f"enable_{disabled_path}_path"] = False
+    return EngineConfig(
+        db_url=db_url,
+        persona=persona,
+        recall_mutates_state=False,
+        **overrides,
+    )

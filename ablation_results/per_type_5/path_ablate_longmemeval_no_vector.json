@@ -1,0 +1,132 @@
+{
+  "overall": {
+    "5": {
+      "n": 30,
+      "any": 0.6333333333333333,
+      "all": 0.4,
+      "frac": 0.5055555555555555
+    },
+    "10": {
+      "n": 30,
+      "any": 0.6666666666666666,
+      "all": 0.5,
+      "frac": 0.5722222222222222
+    },
+    "25": {
+      "n": 30,
+      "any": 0.7666666666666667,
+      "all": 0.5333333333333333,
+      "frac": 0.6305555555555554
+    }
+  },
+  "by_group": {
+    "knowledge-update_k5": {
+      "n": 5,
+      "any": 0.8,
+      "all": 0.2,
+      "frac": 0.4666666666666666
+    },
+    "knowledge-update_k10": {
+      "n": 5,
+      "any": 0.8,
+      "all": 0.8,
+      "frac": 0.8
+    },
+    "knowledge-update_k25": {
+      "n": 5,
+      "any": 1.0,
+      "all": 0.8,
+      "frac": 0.9
+    },
+    "multi-session_k5": {
+      "n": 5,
+      "any": 0.2,
+      "all": 0.0,
+      "frac": 0.1
+    },
+    "multi-session_k10": {
+      "n": 5,
+      "any": 0.4,
+      "all": 0.0,
+      "frac": 0.16666666666666666
+    },
+    "multi-session_k25": {
+      "n": 5,
+      "any": 0.6,
+      "all": 0.0,
+      "frac": 0.21666666666666665
+    },
+    "single-session-assistant_k5": {
+      "n": 5,
+      "any": 1.0,
+      "all": 1.0,
+      "frac": 1.0
+    },
+    "single-session-assistant_k10": {
+      "n": 5,
+      "any": 1.0,
+      "all": 1.0,
+      "frac": 1.0
+    },
+    "single-session-assistant_k25": {
+      "n": 5,
+      "any": 1.0,
+      "all": 1.0,
+      "frac": 1.0
+    },
+    "single-session-preference_k5": {
+      "n": 5,
+      "any": 0.4,
+      "all": 0.4,
+      "frac": 0.4
+    },
+    "single-session-preference_k10": {
+      "n": 5,
+      "any": 0.4,
+      "all": 0.4,
+      "frac": 0.4
+    },
+    "single-session-preference_k25": {
+      "n": 5,
+      "any": 0.6,
+      "all": 0.6,
+      "frac": 0.6
+    },
+    "single-session-user_k5": {
+      "n": 5,
+      "any": 0.8,
+      "all": 0.8,
+      "frac": 0.8
+    },
+    "single-session-user_k10": {
+      "n": 5,
+      "any": 0.8,
+      "all": 0.8,
+      "frac": 0.8
+    },
+    "single-session-user_k25": {
+      "n": 5,
+      "any": 0.8,
+      "all": 0.8,
+      "frac": 0.8
+    },
+    "temporal-reasoning_k5": {
+      "n": 5,
+      "any": 0.6,
+      "all": 0.0,
+      "frac": 0.26666666666666666
+    },
+    "temporal-reasoning_k10": {
+      "n": 5,
+      "any": 0.6,
+      "all": 0.0,
+      "frac": 0.26666666666666666
+    },
+    "temporal-reasoning_k25": {
+      "n": 5,
+      "any": 0.6,
+      "all": 0.0,
+      "frac": 0.26666666666666666
+    }
+  }
+}

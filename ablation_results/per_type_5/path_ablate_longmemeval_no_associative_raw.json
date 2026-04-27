@@ -1,0 +1,1126 @@
+{
+  "summary": {
+    "overall": {
+      "5": {
+        "n": 30,
+        "any": 0.8333333333333334,
+        "all": 0.5666666666666667,
+        "frac": 0.7022222222222222
+      },
+      "10": {
+        "n": 30,
+        "any": 0.9,
+        "all": 0.7,
+        "frac": 0.7866666666666666
+      },
+      "25": {
+        "n": 30,
+        "any": 0.9333333333333333,
+        "all": 0.7666666666666667,
+        "frac": 0.8416666666666667
+      }
+    },
+    "by_group": {
+      "knowledge-update_k5": {
+        "n": 5,
+        "any": 1.0,
+        "all": 0.4,
+        "frac": 0.7333333333333333
+      },
+      "knowledge-update_k10": {
+        "n": 5,
+        "any": 1.0,
+        "all": 1.0,
+        "frac": 1.0
+      },
+      "knowledge-update_k25": {
+        "n": 5,
+        "any": 1.0,
+        "all": 1.0,
+        "frac": 1.0
+      },
+      "multi-session_k5": {
+        "n": 5,
+        "any": 0.6,
+        "all": 0.0,
+        "frac": 0.31333333333333335
+      },
+      "multi-session_k10": {
+        "n": 5,
+        "any": 0.6,
+        "all": 0.0,
+        "frac": 0.31333333333333335
+      },
+      "multi-session_k25": {
+        "n": 5,
+        "any": 0.8,
+        "all": 0.2,
+        "frac": 0.51
+      },
+      "single-session-assistant_k5": {
+        "n": 5,
+        "any": 1.0,
+        "all": 1.0,
+        "frac": 1.0
+      },
+      "single-session-assistant_k10": {
+        "n": 5,
+        "any": 1.0,
+        "all": 1.0,
+        "frac": 1.0
+      },
+      "single-session-assistant_k25": {
+        "n": 5,
+        "any": 1.0,
+        "all": 1.0,
+        "frac": 1.0
+      },
+      "single-session-preference_k5": {
+        "n": 5,
+        "any": 1.0,
+        "all": 1.0,
+        "frac": 1.0
+      },
+      "single-session-preference_k10": {
+        "n": 5,
+        "any": 1.0,
+        "all": 1.0,
+        "frac": 1.0
+      },
+      "single-session-preference_k25": {
+        "n": 5,
+        "any": 1.0,
+        "all": 1.0,
+        "frac": 1.0
+      },
+      "single-session-user_k5": {
+        "n": 5,
+        "any": 0.8,
+        "all": 0.8,
+        "frac": 0.8
+      },
+      "single-session-user_k10": {
+        "n": 5,
+        "any": 1.0,
+        "all": 1.0,
+        "frac": 1.0
+      },
+      "single-session-user_k25": {
+        "n": 5,
+        "any": 1.0,
+        "all": 1.0,
+        "frac": 1.0
+      },
+      "temporal-reasoning_k5": {
+        "n": 5,
+        "any": 0.6,
+        "all": 0.2,
+        "frac": 0.36666666666666664
+      },
+      "temporal-reasoning_k10": {
+        "n": 5,
+        "any": 0.8,
+        "all": 0.2,
+        "frac": 0.4066666666666666
+      },
+      "temporal-reasoning_k25": {
+        "n": 5,
+        "any": 0.8,
+        "all": 0.4,
+        "frac": 0.54
+      }
+    }
+  },
+  "rows": [
+    {
+      "query": "What was my personal best time in the charity 5K run?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 2,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.5,
+      "question_type": "knowledge-update"
+    },
+    {
+      "query": "What was my personal best time in the charity 5K run?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 2,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "knowledge-update"
+    },
+    {
+      "query": "What was my personal best time in the charity 5K run?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 2,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "knowledge-update"
+    },
+    {
+      "query": "How many Korean restaurants have I tried in my city?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 2,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.5,
+      "question_type": "knowledge-update"
+    },
+    {
+      "query": "How many Korean restaurants have I tried in my city?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 2,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "knowledge-update"
+    },
+    {
+      "query": "How many Korean restaurants have I tried in my city?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 2,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "knowledge-update"
+    },
+    {
+      "query": "Where did Rachel move to after her recent relocation?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 3,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.6666666666666666,
+      "question_type": "knowledge-update"
+    },
+    {
+      "query": "Where did Rachel move to after her recent relocation?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 3,
+      "n_covered": 3,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "knowledge-update"
+    },
+    {
+      "query": "Where did Rachel move to after her recent relocation?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 3,
+      "n_covered": 3,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "knowledge-update"
+    },
+    {
+      "query": "What was the amount I was pre-approved for when I got my mortgage from Wells Fargo?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 2,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "knowledge-update"
+    },
+    {
+      "query": "What was the amount I was pre-approved for when I got my mortgage from Wells Fargo?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 2,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "knowledge-update"
+    },
+    {
+      "query": "What was the amount I was pre-approved for when I got my mortgage from Wells Fargo?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 2,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "knowledge-update"
+    },
+    {
+      "query": "How often do I attend yoga classes to help with my anxiety?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 2,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "knowledge-update"
+    },
+    {
+      "query": "How often do I attend yoga classes to help with my anxiety?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 2,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "knowledge-update"
+    },
+    {
+      "query": "How often do I attend yoga classes to help with my anxiety?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 2,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "knowledge-update"
+    },
+    {
+      "query": "How many items of clothing do I need to pick up or return from a store?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 3,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.6666666666666666,
+      "question_type": "multi-session"
+    },
+    {
+      "query": "How many items of clothing do I need to pick up or return from a store?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 3,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.6666666666666666,
+      "question_type": "multi-session"
+    },
+    {
+      "query": "How many items of clothing do I need to pick up or return from a store?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 3,
+      "n_covered": 3,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "multi-session"
+    },
+    {
+      "query": "How many projects have I led or am currently leading?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 4,
+      "n_covered": 0,
+      "recall_any": 0.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.0,
+      "question_type": "multi-session"
+    },
+    {
+      "query": "How many projects have I led or am currently leading?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 4,
+      "n_covered": 0,
+      "recall_any": 0.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.0,
+      "question_type": "multi-session"
+    },
+    {
+      "query": "How many projects have I led or am currently leading?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 4,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.25,
+      "question_type": "multi-session"
+    },
+    {
+      "query": "How many model kits have I worked on or bought?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 5,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.4,
+      "question_type": "multi-session"
+    },
+    {
+      "query": "How many model kits have I worked on or bought?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 5,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.4,
+      "question_type": "multi-session"
+    },
+    {
+      "query": "How many model kits have I worked on or bought?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 5,
+      "n_covered": 4,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.8,
+      "question_type": "multi-session"
+    },
+    {
+      "query": "How many days did I spend on camping trips in the United States this year?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 2,
+      "n_covered": 0,
+      "recall_any": 0.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.0,
+      "question_type": "multi-session"
+    },
+    {
+      "query": "How many days did I spend on camping trips in the United States this year?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 2,
+      "n_covered": 0,
+      "recall_any": 0.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.0,
+      "question_type": "multi-session"
+    },
+    {
+      "query": "How many days did I spend on camping trips in the United States this year?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 2,
+      "n_covered": 0,
+      "recall_any": 0.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.0,
+      "question_type": "multi-session"
+    },
+    {
+      "query": "How many weeks did it take me to watch all the Marvel Cinematic Universe movies and the main Star Wars films?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 2,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.5,
+      "question_type": "multi-session"
+    },
+    {
+      "query": "How many weeks did it take me to watch all the Marvel Cinematic Universe movies and the main Star Wars films?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 2,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.5,
+      "question_type": "multi-session"
+    },
+    {
+      "query": "How many weeks did it take me to watch all the Marvel Cinematic Universe movies and the main Star Wars films?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 2,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.5,
+      "question_type": "multi-session"
+    },
+    {
+      "query": "I'm checking our previous chat about the shift rotation sheet for GM social media agents. Can you remind me what was the rotation for Admon on a Sunday?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-assistant"
+    },
+    {
+      "query": "I'm checking our previous chat about the shift rotation sheet for GM social media agents. Can you remind me what was the rotation for Admon on a Sunday?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-assistant"
+    },
+    {
+      "query": "I'm checking our previous chat about the shift rotation sheet for GM social media agents. Can you remind me what was the rotation for Admon on a Sunday?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-assistant"
+    },
+    {
+      "query": "I'm planning to visit Bandung again and I was wondering if you could remind me of the name of that restaurant in Cihampelas Walk that serves a great Nasi Goreng?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-assistant"
+    },
+    {
+      "query": "I'm planning to visit Bandung again and I was wondering if you could remind me of the name of that restaurant in Cihampelas Walk that serves a great Nasi Goreng?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-assistant"
+    },
+    {
+      "query": "I'm planning to visit Bandung again and I was wondering if you could remind me of the name of that restaurant in Cihampelas Walk that serves a great Nasi Goreng?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-assistant"
+    },
+    {
+      "query": "I'm going back to our previous conversation about the children's book on dinosaurs. Can you remind me what color was the scaly body of the Plesiosaur in the image?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-assistant"
+    },
+    {
+      "query": "I'm going back to our previous conversation about the children's book on dinosaurs. Can you remind me what color was the scaly body of the Plesiosaur in the image?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-assistant"
+    },
+    {
+      "query": "I'm going back to our previous conversation about the children's book on dinosaurs. Can you remind me what color was the scaly body of the Plesiosaur in the image?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-assistant"
+    },
+    {
+      "query": "I'm planning to revisit Orlando. I was wondering if you could remind me of that unique dessert shop with the giant milkshakes we talked about last time?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-assistant"
+    },
+    {
+      "query": "I'm planning to revisit Orlando. I was wondering if you could remind me of that unique dessert shop with the giant milkshakes we talked about last time?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-assistant"
+    },
+    {
+      "query": "I'm planning to revisit Orlando. I was wondering if you could remind me of that unique dessert shop with the giant milkshakes we talked about last time?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-assistant"
+    },
+    {
+      "query": "Can you remind me of the name of the romantic Italian restaurant in Rome you recommended for dinner?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-assistant"
+    },
+    {
+      "query": "Can you remind me of the name of the romantic Italian restaurant in Rome you recommended for dinner?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-assistant"
+    },
+    {
+      "query": "Can you remind me of the name of the romantic Italian restaurant in Rome you recommended for dinner?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-assistant"
+    },
+    {
+      "query": "Can you recommend some resources where I can learn more about video editing?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-preference"
+    },
+    {
+      "query": "Can you recommend some resources where I can learn more about video editing?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-preference"
+    },
+    {
+      "query": "Can you recommend some resources where I can learn more about video editing?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-preference"
+    },
+    {
+      "query": "Can you suggest some accessories that would complement my current photography setup?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 3,
+      "n_covered": 3,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-preference"
+    },
+    {
+      "query": "Can you suggest some accessories that would complement my current photography setup?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 3,
+      "n_covered": 3,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-preference"
+    },
+    {
+      "query": "Can you suggest some accessories that would complement my current photography setup?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 3,
+      "n_covered": 3,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-preference"
+    },
+    {
+      "query": "Can you recommend some recent publications or conferences that I might find interesting?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-preference"
+    },
+    {
+      "query": "Can you recommend some recent publications or conferences that I might find interesting?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-preference"
+    },
+    {
+      "query": "Can you recommend some recent publications or conferences that I might find interesting?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-preference"
+    },
+    {
+      "query": "Can you suggest a hotel for my upcoming trip to Miami?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-preference"
+    },
+    {
+      "query": "Can you suggest a hotel for my upcoming trip to Miami?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-preference"
+    },
+    {
+      "query": "Can you suggest a hotel for my upcoming trip to Miami?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-preference"
+    },
+    {
+      "query": "Can you recommend some interesting cultural events happening around me this weekend?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 3,
+      "n_covered": 3,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-preference"
+    },
+    {
+      "query": "Can you recommend some interesting cultural events happening around me this weekend?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 3,
+      "n_covered": 3,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-preference"
+    },
+    {
+      "query": "Can you recommend some interesting cultural events happening around me this weekend?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 3,
+      "n_covered": 3,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-preference"
+    },
+    {
+      "query": "What degree did I graduate with?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 2,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-user"
+    },
+    {
+      "query": "What degree did I graduate with?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 2,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-user"
+    },
+    {
+      "query": "What degree did I graduate with?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 2,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-user"
+    },
+    {
+      "query": "How long is my daily commute to work?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 1,
+      "n_covered": 0,
+      "recall_any": 0.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.0,
+      "question_type": "single-session-user"
+    },
+    {
+      "query": "How long is my daily commute to work?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-user"
+    },
+    {
+      "query": "How long is my daily commute to work?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-user"
+    },
+    {
+      "query": "Where did I redeem a $5 coupon on coffee creamer?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-user"
+    },
+    {
+      "query": "Where did I redeem a $5 coupon on coffee creamer?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-user"
+    },
+    {
+      "query": "Where did I redeem a $5 coupon on coffee creamer?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-user"
+    },
+    {
+      "query": "What play did I attend at the local community theater?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-user"
+    },
+    {
+      "query": "What play did I attend at the local community theater?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-user"
+    },
+    {
+      "query": "What play did I attend at the local community theater?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-user"
+    },
+    {
+      "query": "What is the name of the playlist I created on Spotify?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-user"
+    },
+    {
+      "query": "What is the name of the playlist I created on Spotify?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-user"
+    },
+    {
+      "query": "What is the name of the playlist I created on Spotify?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "single-session-user"
+    },
+    {
+      "query": "How many days passed between my visit to the Museum of Modern Art (MoMA) and the 'Ancient Civilizations' exhibit at the Metropolitan Museum of Art?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 2,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "temporal-reasoning"
+    },
+    {
+      "query": "How many days passed between my visit to the Museum of Modern Art (MoMA) and the 'Ancient Civilizations' exhibit at the Metropolitan Museum of Art?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 2,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "temporal-reasoning"
+    },
+    {
+      "query": "How many days passed between my visit to the Museum of Modern Art (MoMA) and the 'Ancient Civilizations' exhibit at the Metropolitan Museum of Art?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 2,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "temporal-reasoning"
+    },
+    {
+      "query": "Which three events happened in the order from first to last: the day I helped my friend prepare the nursery, the day I helped my cousin pick out stuff for her baby shower, and the day I ordered a customized phone case for my friend's birthday?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 3,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.3333333333333333,
+      "question_type": "temporal-reasoning"
+    },
+    {
+      "query": "Which three events happened in the order from first to last: the day I helped my friend prepare the nursery, the day I helped my cousin pick out stuff for her baby shower, and the day I ordered a customized phone case for my friend's birthday?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 3,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.3333333333333333,
+      "question_type": "temporal-reasoning"
+    },
+    {
+      "query": "Which three events happened in the order from first to last: the day I helped my friend prepare the nursery, the day I helped my cousin pick out stuff for her baby shower, and the day I ordered a customized phone case for my friend's birthday?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 3,
+      "n_covered": 3,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0,
+      "question_type": "temporal-reasoning"
+    },
+    {
+      "query": "How many weeks ago did I meet up with my aunt and receive the crystal chandelier?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 1,
+      "n_covered": 0,
+      "recall_any": 0.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.0,
+      "question_type": "temporal-reasoning"
+    },
+    {
+      "query": "How many weeks ago did I meet up with my aunt and receive the crystal chandelier?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 1,
+      "n_covered": 0,
+      "recall_any": 0.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.0,
+      "question_type": "temporal-reasoning"
+    },
+    {
+      "query": "How many weeks ago did I meet up with my aunt and receive the crystal chandelier?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 1,
+      "n_covered": 0,
+      "recall_any": 0.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.0,
+      "question_type": "temporal-reasoning"
+    },
+    {
+      "query": "How many months have passed since I participated in two charity events in a row, on consecutive days?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 5,
+      "n_covered": 0,
+      "recall_any": 0.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.0,
+      "question_type": "temporal-reasoning"
+    },
+    {
+      "query": "How many months have passed since I participated in two charity events in a row, on consecutive days?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 5,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.2,
+      "question_type": "temporal-reasoning"
+    },
+    {
+      "query": "How many months have passed since I participated in two charity events in a row, on consecutive days?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 5,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.2,
+      "question_type": "temporal-reasoning"
+    },
+    {
+      "query": "How many days passed between the day I started playing along to my favorite songs on my old keyboard and the day I discovered a bluegrass band?",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 2,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.5,
+      "question_type": "temporal-reasoning"
+    },
+    {
+      "query": "How many days passed between the day I started playing along to my favorite songs on my old keyboard and the day I discovered a bluegrass band?",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 2,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.5,
+      "question_type": "temporal-reasoning"
+    },
+    {
+      "query": "How many days passed between the day I started playing along to my favorite songs on my old keyboard and the day I discovered a bluegrass band?",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 2,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.5,
+      "question_type": "temporal-reasoning"
+    }
+  ]
+}

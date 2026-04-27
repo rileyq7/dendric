@@ -42,7 +42,11 @@ tests/
 .pytest_cache/
 mnestic-ui.jsx
 QUICK_REFERENCE.txt
-ablation_results/
+# Ablation/sweep results: keep the small per-config JSON summaries +
+# raw rows tracked so the rigor doc's tables are repo-reproducible,
+# but ignore the noisy per-server logs from the legacy bench harness.
+ablation_results/server_*.log
+ablation_results/results_*.json
 .claude/
 
 # Bench output: keep harness code + analysis docs tracked, ignore generated runs.
