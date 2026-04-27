@@ -114,7 +114,11 @@ def _run_config(config_name: str, corpus: str, args, k_values: list[int],
     config 2. A fresh process per config frees everything at teardown.
     """
     k_str = ",".join(str(k) for k in k_values)
-    raw_out = out_dir / f"path_ablate_{corpus}_{config_name}_raw.json"
+    overrides = getattr(args, "override", []) or []
+    suffix = ""
+    if overrides:
+        suffix = "__" + "_".join(o.replace("=", "") for o in overrides)
+    raw_out = out_dir / f"path_ablate_{corpus}_{config_name}{suffix}_raw.json"
 
     cmd = [
         sys.executable, "-m", "src.scripts.recall_at_k",
@@ -138,6 +142,11 @@ def _run_config(config_name: str, corpus: str, args, k_values: list[int],
             cmd += ["--per-type", str(args.per_type)]
         if args.cycles is not None:
             cmd += ["--cycles", str(args.cycles)]
+
+    # Per-config override pass-through so e.g. one can re-run the LOO
+    # ablation with sa_decay=0.7 instead of the production default.
+    for ov in getattr(args, "override", []) or []:
+        cmd += ["--override", ov]
 
     print(f"  → subprocess: {' '.join(cmd)}", flush=True)
     proc = subprocess.run(cmd, check=False)
@@ -238,6 +247,11 @@ def main():
     p.add_argument("--types", nargs="+", default=None)
     p.add_argument("--per-type", type=int, default=None)
     p.add_argument("--cycles", type=int, default=1)
+    p.add_argument(
+        "--override", action="append", default=[],
+        help="Pass-through EngineConfig override applied to every config "
+             "in the sweep (e.g. --override sa_decay=0.7). Repeatable.",
+    )
     args = p.parse_args()
 
     if args.corpus in ("meridian_deep", "synthetic"):

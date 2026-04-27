@@ -118,6 +118,183 @@ a 3-hour LongMemEval sweep into ~10 min.
 
 ---
 
+### Path ablation at sa_decay=0.7 — associative path is net-harmful on meridian_deep
+
+**What.** Re-ran the 4-path leave-one-out ablation on meridian_deep
+with `sa_decay=0.7` (the better decay value from the 2D sweep) instead
+of the production default 0.5, holding all other knobs at defaults.
+Compared deltas to the production-decay run from 2026-04-25.
+
+**recall@5 deltas vs `full` (smaller magnitude = path is redundant):**
+
+| config | decay=0.5 (production) | decay=0.7 |
+|---|---|---|
+| `plain_rag` | 0.0pp any | 0.0pp any |
+| `no_vector` | -20.0pp | **-33.3pp** |
+| `no_keyword` | -6.7pp | -6.7pp |
+| `no_associative` | **+6.7pp (hurts)** | **+6.7pp (hurts)** |
+| `no_graph` | +6.7pp (hurts) | 0.0pp (neutral) |
+
+**Two findings.**
+
+**(a) Vector becomes more dominant at decay=0.7, not less.** The
+`no_vector` ablation drops further (-33.3pp vs -20.0pp), and the
+*other* non-vector paths shrink in their apparent contribution. So
+moving to the better decay value doesn't rescue the redundant paths;
+it makes vector even more singular as the load-bearing path.
+
+**(b) The associative path is net-harmful at *both* decay values.**
+`no_associative` beats `full` by +6.7pp recall_any@5 in both runs.
+At decay=0.7, `no_associative` reaches recall_frac@5=0.640 — the
+same number as the 2D-sweep optimum (threshold=0.3, decay=0.7). In
+other words: the "best operating point" in the 2D sweep is the one
+where the associative path's subtractive effect is minimized via
+threshold=0.3, but disabling the path entirely matches that ceiling.
+
+**How measured.**
+```bash
+python -m src.scripts.path_ablate --corpus meridian_deep \
+    --db postgresql://localhost:5432/meridian_deep \
+    --annotations /Users/rileycoleman/meridian/probes/meridian_recall_gold.json \
+    --override sa_decay=0.7 --k 5,10,25 \
+    --output-dir ablation_results/meridian_deep_decay07
+```
+
+`path_ablate.py` gained a `--override` pass-through flag in the same
+session.
+
+**Caveat.**
+- Same n=15, same 1-probe-flips noise floor as the 2D sweep. The
+  "associative is harmful" finding is consistent across decay values
+  (so it's not noise on one decay), but the magnitude could shrink
+  on a larger probe set.
+- Only tested on meridian_deep. The path ablation on LongMemEval at
+  decay=0.5 showed associative neutral (0.0pp) — could shift again
+  at decay=0.7. Worth a re-run.
+- We did not test what happens when the associative path is disabled
+  AND threshold is moved to 0.3 simultaneously — possible those two
+  effects don't compose linearly.
+
+**Implication.**
+- The architecture's claimed value via spreading-activation /
+  associative retrieval is **structurally underperforming on aged
+  corpora**. The associative path is the second-most-complex code
+  path (entity graph BFS + max-aggregation + déjà-vu archive trigger
+  + persona fallback) and it's actively subtractive at retrieval
+  time.
+- **Honest paper position:** vector is doing nearly all the work,
+  keyword adds modest signal, graph is roughly neutral, and
+  associative is harmful at the production decay default. The
+  4-path-fusion claim is overstated in the implementation, even if
+  the design intent (associative path enables aged-archive retrieval
+  inaccessible to vector) is sound.
+- **Architectural follow-up worth doing before publishing:** trace
+  why associative hurts. Two hypotheses:
+  - The path returns *too many* archive memories (per the diagnostic,
+    most probes pull 50+ archive memories from one entity), and even
+    after RRF fusion their cumulative weight pushes good non-archive
+    candidates out of top-5
+  - The fan-out normalization (1/sqrt(num_linked)) doesn't penalize
+    high-degree entities enough; queries about persona-adjacent topics
+    pull persona-linked archive noise
+
+---
+
+### Threshold × decay 2D sweep — real driver is decay, threshold remains inert
+
+**What.** Targeted 2D grid: `archive_trigger_threshold ∈ [0.0, 0.3, 0.5,
+0.7, 0.9]` × `sa_decay ∈ [0.3, 0.5, 0.7]`, on meridian_deep (n=15). To
+make `sa_decay` and `sa_max_hops` configurable through the override
+mechanism they had to be promoted from hardcoded function args into
+`EngineConfig` fields and threaded through `engine.recall()`.
+
+**recall_frac@5:**
+
+| threshold ↓ / decay → | 0.3 | 0.5 (default) | 0.7 |
+|---|---|---|---|
+| 0.0 | 0.562 | 0.562 | 0.573 |
+| 0.3 | 0.576 | 0.540 | **0.640** |
+| 0.5 | 0.576 | 0.540 | 0.573 |
+| 0.7 (default) | 0.576 | 0.540 | 0.573 |
+| 0.9 | 0.576 | 0.540 | 0.573 |
+
+**Two findings.**
+
+**(a) The threshold is mostly inert *within* each decay column.** At
+decay=0.5 (production default), every threshold ≥ 0.3 gives the same
+result. At decay=0.3, ditto. Only at decay=0.7 does the threshold show
+a single discriminating step (0.3 → 0.5 drops frac from 0.640 to 0.573);
+above 0.5 it's inert again. This corroborates the diagnostic finding:
+non-seed entities crossing the threshold either pull the same archive
+memories the seed crossings already pull, or those memories don't make
+it into top-5 anyway. The threshold is not a useful tuning knob at any
+decay value.
+
+**(b) Decay is the actual driver.** The current default `decay=0.5` is
+the **worst** of the three decay values:
+- decay=0.5: best frac@5 = 0.562
+- decay=0.3: best frac@5 = 0.576 (+1.4pp)
+- decay=0.7: best frac@5 = **0.640 (+7.8pp at threshold=0.3)**
+
+So the production default sits at a local minimum on this corpus.
+decay=0.7 with threshold=0.3 is +7.8pp recall_frac@5 over current
+production — not a small effect.
+
+**How measured.**
+```bash
+python -m src.scripts.param_sweep --corpus meridian_deep \
+    --db postgresql://localhost:5432/meridian_deep \
+    --annotations /Users/rileycoleman/meridian/probes/meridian_recall_gold.json \
+    --grid2d threshold_x_decay --k 5,10,25 \
+    --output-dir param_sweep_results/meridian_deep_2d
+```
+
+Driver: `src/scripts/param_sweep.py` with the new `--grid2d` flag and
+the `threshold_x_decay` predefined grid in `GRIDS_2D`.
+
+**Caveat.**
+- n=15: 1 probe = 6.7pp on `recall_any`, 0.067 on `recall_frac`. The
+  +7.8pp gain at decay=0.7 is just slightly above 1-probe noise. Need
+  a larger probe set (or LongMemEval re-run with the new sweep range)
+  before recommending a default change.
+- decay=0.7 with threshold=0.3 may also have side effects we haven't
+  measured: more non-seed entities cross the threshold, which means
+  more archive memories pulled, which (per the diagnostic at decay=0.9)
+  can blow up to runaway scale on highly-connected entities. The 0.640
+  result is one operating point; at scale this regime might be more
+  brittle.
+- The diagnostic showed decay=0.9 has a probe pulling 80k+ archive
+  memories on a single entity. We didn't include 0.9 in the recall@k
+  sweep because the diagnostic already established it's past the
+  useful range.
+
+**Implication.**
+- Honest paper claim updates:
+  - **`archive_trigger_threshold` should be removed from the "tuned
+    parameters" list.** Across 15 (threshold × decay) combinations,
+    threshold only changes results in 1 cell. It's not earning its
+    keep as a knob.
+  - **`sa_decay` (currently buried as a function default) is a
+    first-class architectural parameter** and warrants its own
+    discussion. The production value 0.5 is suboptimal on the test
+    corpus; 0.7 is meaningfully better.
+- Publication-blocking → publication-shaping: the original "we tuned
+  3 knobs" framing was wrong. The honest framing is "we surfaced a
+  hidden 4th knob (decay) which is doing the real work, and one of
+  the 3 explicit knobs is structurally redundant."
+- **Recommended follow-ups before publishing:**
+  - Re-run the path ablation with `sa_decay=0.7` to see if the
+    associative path's marginal contribution changes (the n=15
+    ablation showed it neutral; might shift to positive at the
+    better decay value)
+  - Re-run on LongMemEval to check whether decay matters there too
+    or only on aged corpora — that's a regime-dependence claim
+    worth confirming
+  - Probe set expansion: add 5-10 more meridian_deep annotations
+    so 1-probe noise floor is below the gains we're trying to claim
+
+---
+
 ### Déjà-vu diagnostic — threshold is binary, not graduated
 
 **What.** Direct instrumentation of the spreading-activation path

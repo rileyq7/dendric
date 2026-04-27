@@ -1,0 +1,477 @@
+{
+  "summary": {
+    "overall": {
+      "5": {
+        "n": 15,
+        "any": 0.8,
+        "all": 0.3333333333333333,
+        "frac": 0.5755555555555555
+      },
+      "10": {
+        "n": 15,
+        "any": 0.9333333333333333,
+        "all": 0.4666666666666667,
+        "frac": 0.7200000000000001
+      },
+      "25": {
+        "n": 15,
+        "any": 0.9333333333333333,
+        "all": 0.4666666666666667,
+        "frac": 0.7200000000000001
+      }
+    },
+    "by_group": {}
+  },
+  "rows": [
+    {
+      "query": "where am I going next weekend",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 3,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.3333333333333333
+    },
+    {
+      "query": "where am I going next weekend",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 3,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.3333333333333333
+    },
+    {
+      "query": "where am I going next weekend",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 3,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.3333333333333333
+    },
+    {
+      "query": "when is my cape town trip",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 3,
+      "n_covered": 3,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0
+    },
+    {
+      "query": "when is my cape town trip",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 3,
+      "n_covered": 3,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0
+    },
+    {
+      "query": "when is my cape town trip",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 3,
+      "n_covered": 3,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0
+    },
+    {
+      "query": "why am I going to cape town",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 2,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.5
+    },
+    {
+      "query": "why am I going to cape town",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 2,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.5
+    },
+    {
+      "query": "why am I going to cape town",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 2,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.5
+    },
+    {
+      "query": "who is my wife",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 3,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.6666666666666666
+    },
+    {
+      "query": "who is my wife",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 3,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.6666666666666666
+    },
+    {
+      "query": "who is my wife",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 3,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.6666666666666666
+    },
+    {
+      "query": "what company do I work at",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0
+    },
+    {
+      "query": "what company do I work at",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0
+    },
+    {
+      "query": "what company do I work at",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0
+    },
+    {
+      "query": "what is my role at pitchwits",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 1,
+      "n_covered": 0,
+      "recall_any": 0.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.0
+    },
+    {
+      "query": "what is my role at pitchwits",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0
+    },
+    {
+      "query": "what is my role at pitchwits",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0
+    },
+    {
+      "query": "who is my CEO",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0
+    },
+    {
+      "query": "who is my CEO",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0
+    },
+    {
+      "query": "who is my CEO",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0
+    },
+    {
+      "query": "where did I get married",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 2,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.5
+    },
+    {
+      "query": "where did I get married",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 2,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.5
+    },
+    {
+      "query": "where did I get married",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 2,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.5
+    },
+    {
+      "query": "when is the tuscany ceremony",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 2,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0
+    },
+    {
+      "query": "when is the tuscany ceremony",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 2,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0
+    },
+    {
+      "query": "when is the tuscany ceremony",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 2,
+      "n_covered": 2,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0
+    },
+    {
+      "query": "what airline am I flying to cape town",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 1,
+      "n_covered": 0,
+      "recall_any": 0.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.0
+    },
+    {
+      "query": "what airline am I flying to cape town",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 1,
+      "n_covered": 0,
+      "recall_any": 0.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.0
+    },
+    {
+      "query": "what airline am I flying to cape town",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 1,
+      "n_covered": 0,
+      "recall_any": 0.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.0
+    },
+    {
+      "query": "what is the architecture of dendric",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 5,
+      "n_covered": 4,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.8
+    },
+    {
+      "query": "what is the architecture of dendric",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 5,
+      "n_covered": 4,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.8
+    },
+    {
+      "query": "what is the architecture of dendric",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 5,
+      "n_covered": 4,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.8
+    },
+    {
+      "query": "when is mary's sister visiting",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 2,
+      "n_covered": 0,
+      "recall_any": 0.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.0
+    },
+    {
+      "query": "when is mary's sister visiting",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 2,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.5
+    },
+    {
+      "query": "when is mary's sister visiting",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 2,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.5
+    },
+    {
+      "query": "when is mary's brother visiting",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 3,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.3333333333333333
+    },
+    {
+      "query": "when is mary's brother visiting",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 3,
+      "n_covered": 3,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0
+    },
+    {
+      "query": "when is mary's brother visiting",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 3,
+      "n_covered": 3,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0
+    },
+    {
+      "query": "what am I building as a side project",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 2,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.5
+    },
+    {
+      "query": "what am I building as a side project",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 2,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.5
+    },
+    {
+      "query": "what am I building as a side project",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 2,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 0.0,
+      "recall_frac": 0.5
+    },
+    {
+      "query": "where do I live",
+      "k": 5,
+      "n_retrieved": 5,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0
+    },
+    {
+      "query": "where do I live",
+      "k": 10,
+      "n_retrieved": 10,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0
+    },
+    {
+      "query": "where do I live",
+      "k": 25,
+      "n_retrieved": 25,
+      "n_expected": 1,
+      "n_covered": 1,
+      "recall_any": 1.0,
+      "recall_all": 1.0,
+      "recall_frac": 1.0
+    }
+  ]
+}

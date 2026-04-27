@@ -395,6 +395,8 @@ class MemoryEngine:
                 persona_seed_activation=self.config.persona_seed_activation,
                 persona_fallback=self.config.persona_fallback_seed,
                 archive_trigger_threshold=archive_trigger,
+                decay=self.config.sa_decay,
+                max_hops=self.config.sa_max_hops,
             )
             if self.config.enable_associative_path else []
         )

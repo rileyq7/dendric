@@ -26,6 +26,7 @@ manually and reports:
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -148,6 +149,20 @@ def _archive_memory_count_for_entity(eg: EntityGraphStore, store, eid) -> int:
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--decay-values", default="0.5",
+        help="Comma-separated decay values to test (default: 0.5, the production default). "
+             "Pass e.g. 0.3,0.5,0.7,0.9 to compare. Larger decay means activation falls "
+             "off less per hop, so hop-1 neighbors can reach the threshold.",
+    )
+    parser.add_argument(
+        "--max-hops", type=int, default=2,
+        help="Spreading-activation hop limit (default: 2, matches production).",
+    )
+    args = parser.parse_args()
+    decay_values = [float(x.strip()) for x in args.decay_values.split(",") if x.strip()]
+
     db_url = os.environ.get("DATABASE_URL", "postgresql://localhost:5432/meridian_deep")
     annotations_path = "/Users/rileycoleman/meridian/probes/meridian_recall_gold.json"
     persona = os.environ.get("PERSONA", "riley")
@@ -155,6 +170,7 @@ def main():
     print(f"DB:          {db_url}")
     print(f"Annotations: {annotations_path}")
     print(f"Persona:     {persona}")
+    print(f"Decay sweep: {decay_values}  (max_hops={args.max_hops})")
     print()
 
     with open(annotations_path) as f:
@@ -165,82 +181,81 @@ def main():
     eg = EntityGraphStore(engine.store.conn)
 
     n_probes = len(annotations)
-    crossings_per_threshold: dict[float, int] = {t: 0 for t in THRESHOLDS_TO_REPORT}
-    crossings_with_archive: dict[float, int] = {t: 0 for t in THRESHOLDS_TO_REPORT}
 
-    print(f"{'#':<3} {'query':<60} {'seeds':<35} {'max_act':>8} {'≥0.7':>5} {'arch':>5}")
-    print("-" * 120)
+    for decay in decay_values:
+        print(f"\n{'='*120}")
+        print(f"  decay = {decay}  (hop-1 cap = {decay}, hop-2 cap = {decay**2:.3f})")
+        print(f"{'='*120}")
+        print(f"{'#':<3} {'query':<55} {'seeds':<30} {'max_act':>8} "
+              + " ".join(f">={t}".rjust(6) for t in THRESHOLDS_TO_REPORT)
+              + f" {'arch@.7':>8}")
+        print("-" * 130)
 
-    for i, ann in enumerate(annotations):
-        query = ann["query"]
-        seeds_resolved, seeds_unresolved, persona_seeds = _resolve_seeds(query, eg, persona)
-        all_seeds = seeds_resolved + persona_seeds
+        # Per-decay aggregates
+        probe_crossing_counts = {t: 0 for t in THRESHOLDS_TO_REPORT}
+        probe_archive_counts = {t: 0 for t in THRESHOLDS_TO_REPORT}
+        # Track hop-1 reach: how many probes have at least one *non-seed* (hop-1+)
+        # entity reaching the 0.7 threshold? That's the test for whether the
+        # threshold is graduated rather than binary.
+        probes_with_nonseed_at_07 = 0
 
-        if not all_seeds:
-            print(f"{i+1:<3} {query[:58]:<60} (no seeds resolved)")
-            continue
+        for i, ann in enumerate(annotations):
+            query = ann["query"]
+            seeds_resolved, _, persona_seeds = _resolve_seeds(query, eg, persona)
+            all_seeds = seeds_resolved + persona_seeds
 
-        acts = _compute_activations_only(all_seeds, eg, persona=persona)
-        if not acts:
-            continue
-
-        max_act = max(acts.values())
-        crossed_07 = sum(1 for v in acts.values() if v >= 0.7)
-        archive_hits_for_07 = 0
-        for eid_str, act in acts.items():
-            if act < 0.7:
+            if not all_seeds:
+                print(f"{i+1:<3} {query[:53]:<55} (no seeds)")
                 continue
-            archive_hits_for_07 += _archive_memory_count_for_entity(eg, engine.store, eid_str)
 
-        for t in THRESHOLDS_TO_REPORT:
-            n_crossed = sum(1 for v in acts.values() if v >= t)
-            crossings_per_threshold[t] += n_crossed
-            if n_crossed > 0:
-                # Count this probe as having ≥1 entity at threshold t with ≥1 archive mem
-                with_arch = 0
-                for eid_str, act in acts.items():
-                    if act < t:
-                        continue
-                    with_arch += _archive_memory_count_for_entity(eg, engine.store, eid_str)
-                if with_arch > 0:
-                    crossings_with_archive[t] += 1
-
-        seed_str = ",".join(seeds_resolved[:2]) or ("[fallback:" + (persona_seeds[0] if persona_seeds else "") + "]")
-        print(f"{i+1:<3} {query[:58]:<60} {seed_str[:33]:<35} {max_act:>8.3f} {crossed_07:>5d} {archive_hits_for_07:>5d}")
-
-    print()
-    print(f"Summary across {n_probes} probes:")
-    print(f"  {'threshold':<10} {'probes w/ ≥1 entity crossing':>30} {'probes w/ archive mems available':>35}")
-    for t in THRESHOLDS_TO_REPORT:
-        # crossings_per_threshold counts entity-crossings; want probe-level
-        # — re-derive cheaply by re-iterating
-        pass
-    # Re-iterate for probe-level counts (cleaner than carrying state)
-    probe_crossing_counts = {t: 0 for t in THRESHOLDS_TO_REPORT}
-    probe_archive_counts = {t: 0 for t in THRESHOLDS_TO_REPORT}
-    for ann in annotations:
-        query = ann["query"]
-        seeds_resolved, _, persona_seeds = _resolve_seeds(query, eg, persona)
-        all_seeds = seeds_resolved + persona_seeds
-        if not all_seeds:
-            continue
-        acts = _compute_activations_only(all_seeds, eg, persona=persona)
-        if not acts:
-            continue
-        for t in THRESHOLDS_TO_REPORT:
-            crossing = [eid for eid, v in acts.items() if v >= t]
-            if not crossing:
-                continue
-            probe_crossing_counts[t] += 1
-            arch_total = sum(
-                _archive_memory_count_for_entity(eg, engine.store, eid)
-                for eid in crossing
+            acts = _compute_activations_only(
+                all_seeds, eg, persona=persona,
+                max_hops=args.max_hops, decay=decay,
             )
-            if arch_total > 0:
-                probe_archive_counts[t] += 1
+            if not acts:
+                continue
 
-    for t in THRESHOLDS_TO_REPORT:
-        print(f"  {t:<10.1f} {probe_crossing_counts[t]:>30d} {probe_archive_counts[t]:>35d}")
+            # Identify seed entity IDs so we can ask "does any *non-seed* cross 0.7?"
+            seed_ids = set()
+            for name in all_seeds:
+                eid = eg.get_entity_by_name((name or "").strip().lower())
+                if eid is not None:
+                    seed_ids.add(eid)
+
+            max_act = max(acts.values())
+            crossings = [sum(1 for v in acts.values() if v >= t) for t in THRESHOLDS_TO_REPORT]
+            archive_hits_07 = sum(
+                _archive_memory_count_for_entity(eg, engine.store, eid)
+                for eid, act in acts.items() if act >= 0.7
+            )
+
+            nonseed_at_07 = any(
+                act >= 0.7 and eid not in seed_ids
+                for eid, act in acts.items()
+            )
+            if nonseed_at_07:
+                probes_with_nonseed_at_07 += 1
+
+            for t, n in zip(THRESHOLDS_TO_REPORT, crossings):
+                if n > 0:
+                    probe_crossing_counts[t] += 1
+                    arch_total = sum(
+                        _archive_memory_count_for_entity(eg, engine.store, eid)
+                        for eid, act in acts.items() if act >= t
+                    )
+                    if arch_total > 0:
+                        probe_archive_counts[t] += 1
+
+            seed_str = ",".join(seeds_resolved[:2]) or ("[fb:" + (persona_seeds[0] if persona_seeds else "") + "]")
+            crossings_str = " ".join(f"{n:>6d}" for n in crossings)
+            print(f"{i+1:<3} {query[:53]:<55} {seed_str[:28]:<30} {max_act:>8.3f} {crossings_str} {archive_hits_07:>8d}")
+
+        print()
+        print(f"  Probes with non-seed entity ≥0.7: {probes_with_nonseed_at_07}/{n_probes} "
+              f"  (= threshold is graduated if >0, binary if 0)")
+        print(f"  {'thresh':<8} {'probes_crossing':>15} {'with_archive':>14}")
+        for t in THRESHOLDS_TO_REPORT:
+            print(f"  {t:<8.1f} {probe_crossing_counts[t]:>15d} {probe_archive_counts[t]:>14d}")
 
 
 if __name__ == "__main__":

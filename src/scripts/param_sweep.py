@@ -49,16 +49,36 @@ KNOBS: dict[str, tuple[float, list[float]]] = {
     "archive_rrf_boost": (1.8, [1.0, 1.4, 1.8, 2.2, 2.6]),
     "archive_trigger_threshold": (0.7, [0.0, 0.3, 0.5, 0.7, 0.9]),
     "mod_temp_lift": (0.4, [0.0, 0.2, 0.4, 0.6, 0.8]),
+    # sa_decay: 0.3 keeps the binary-seed-gate behavior; 0.5 = current
+    # production default; 0.7 makes hop-1 neighbors reach the 0.7 trigger
+    # threshold (graduated regime); 0.9 is past the runaway point per the
+    # decay diagnostic (one query pulls 80k archive memories).
+    "sa_decay": (0.5, [0.3, 0.5, 0.7]),
+}
+
+
+# Targeted 2D grids — for revealing knob interactions that 1D sweeps miss.
+# Each entry: ((knob_a, grid_a), (knob_b, grid_b)).
+GRIDS_2D: dict[str, tuple] = {
+    # Tests the hypothesis that archive_trigger_threshold only becomes
+    # graduated (rather than binary) at sa_decay=0.7, so the threshold's
+    # apparent inertness in 1D is conditional on decay.
+    "threshold_x_decay": (
+        ("archive_trigger_threshold", [0.0, 0.3, 0.5, 0.7, 0.9]),
+        ("sa_decay", [0.3, 0.5, 0.7]),
+    ),
 }
 
 
 def _run_point(
-    knob: str, value: float, corpus: str, args, k_values: list[int],
-    out_dir: Path, skip_ingest: bool,
+    overrides: dict[str, float], corpus: str, args, k_values: list[int],
+    out_dir: Path, skip_ingest: bool, label: str | None = None,
 ) -> dict:
-    """Run one (knob, value) point as a recall_at_k subprocess."""
+    """Run one sweep point as a recall_at_k subprocess. `overrides` carries
+    one or more knob=value pairs (one for 1D, two for 2D, etc)."""
     k_str = ",".join(str(k) for k in k_values)
-    raw_out = out_dir / f"sweep_{corpus}_{knob}_{value}_raw.json"
+    label = label or "_".join(f"{k}_{v}" for k, v in overrides.items())
+    raw_out = out_dir / f"sweep_{corpus}_{label}_raw.json"
 
     cmd = [
         sys.executable, "-m", "src.scripts.recall_at_k",
@@ -66,8 +86,9 @@ def _run_point(
         "--config", "full",
         "--k", k_str,
         "--output", str(raw_out),
-        "--override", f"{knob}={value}",
     ]
+    for knob, value in overrides.items():
+        cmd += ["--override", f"{knob}={value}"]
     if corpus == "meridian_deep":
         cmd += ["--db", args.db, "--annotations", args.annotations]
     else:
@@ -81,16 +102,17 @@ def _run_point(
         if skip_ingest:
             cmd += ["--skip-ingest"]
 
-    print(f"  → subprocess: --override {knob}={value}"
+    overrides_str = " ".join(f"{k}={v}" for k, v in overrides.items())
+    print(f"  → subprocess: {overrides_str}"
           + (" (skip-ingest)" if skip_ingest else ""), flush=True)
     proc = subprocess.run(cmd, check=False)
     if proc.returncode != 0:
         raise RuntimeError(
-            f"recall_at_k subprocess failed for {knob}={value} "
+            f"recall_at_k subprocess failed for {overrides_str} "
             f"(exit {proc.returncode}); see log above"
         )
     if not raw_out.exists():
-        raise RuntimeError(f"no output for {knob}={value}")
+        raise RuntimeError(f"no output for {overrides_str}")
     raw = json.loads(raw_out.read_text())
     summary = raw["summary"]
     summary["overall"] = {int(k): v for k, v in summary.get("overall", {}).items()}
@@ -130,6 +152,49 @@ def _knob_table(
     return "\n".join(lines)
 
 
+def _grid2d_table(
+    knob_a: str, grid_a: list[float], knob_b: str, grid_b: list[float],
+    results: dict[tuple[float, float], dict], k: int,
+) -> str:
+    """Build a 2D heatmap-style markdown table at one specific k.
+    Rows are knob_a values, columns are knob_b values, cells are recall_any@k.
+    Useful for spotting interaction patterns (a row that varies in
+    one column block but not another)."""
+    lines = [f"## 2D sweep: {knob_a} × {knob_b}  (recall_any@{k})\n"]
+    lines.append(f"Rows: `{knob_a}`. Columns: `{knob_b}`.\n")
+    header = [f"`{knob_a}` ↓ / `{knob_b}` →"] + [str(b) for b in grid_b]
+    lines.append("| " + " | ".join(header) + " |")
+    lines.append("|" + "|".join("---" for _ in header) + "|")
+    for a in grid_a:
+        row = [str(a)]
+        for b in grid_b:
+            cell = results.get((a, b))
+            if cell is None:
+                row.append("—")
+                continue
+            v = cell["overall"].get(k, {})
+            row.append(f"{v.get('any', 0):.1%}")
+        lines.append("| " + " | ".join(row) + " |")
+    lines.append("")
+
+    # Same table for recall_frac@k — often more informative on small n
+    lines.append(f"\n### recall_frac@{k}\n")
+    lines.append("| " + " | ".join(header) + " |")
+    lines.append("|" + "|".join("---" for _ in header) + "|")
+    for a in grid_a:
+        row = [str(a)]
+        for b in grid_b:
+            cell = results.get((a, b))
+            if cell is None:
+                row.append("—")
+                continue
+            v = cell["overall"].get(k, {})
+            row.append(f"{v.get('frac', 0):.3f}")
+        lines.append("| " + " | ".join(row) + " |")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--corpus", choices=["meridian_deep", "longmemeval"], required=True)
@@ -151,6 +216,12 @@ def main():
         help="Skip ingest from the first point onward (longmemeval only). "
              "Use when per-question DBs at --db-prefix are already populated "
              "from a prior run with the same questions.",
+    )
+    p.add_argument(
+        "--grid2d", default=None, choices=list(GRIDS_2D),
+        help="Run a targeted 2D grid (interaction sweep) instead of the "
+             "default per-knob 1D sweeps. Use when 1D results suggest "
+             "two knobs interact.",
     )
     args = p.parse_args()
 
@@ -185,34 +256,67 @@ def main():
     # sweep, since retrieval-only knobs can't change what's stored.
     longmemeval_first_pass = (args.corpus == "longmemeval") and not args.reuse_ingest
 
-    for knob in args.knobs:
-        default, grid = KNOBS[knob]
-        print(f"\n=== Sweeping {knob} (default={default}) over {grid} ===", flush=True)
-        per_knob: dict[float, dict] = {}
-        for i, val in enumerate(grid):
-            skip_ingest = args.corpus == "longmemeval" and not longmemeval_first_pass
-            try:
-                summary = _run_point(knob, val, args.corpus, args, k_values, out_dir, skip_ingest)
-            except Exception as e:
-                print(f"  point {knob}={val} failed: {e}", flush=True)
-                continue
-            per_knob[val] = summary
-            longmemeval_first_pass = False
+    if args.grid2d:
+        if args.grid2d not in GRIDS_2D:
+            print(f"Unknown 2D grid {args.grid2d!r}. Choices: {list(GRIDS_2D)}",
+                  file=sys.stderr)
+            sys.exit(1)
+        (knob_a, grid_a), (knob_b, grid_b) = GRIDS_2D[args.grid2d]
+        print(f"\n=== 2D sweep: {knob_a} × {knob_b} ({len(grid_a)} × {len(grid_b)} = "
+              f"{len(grid_a) * len(grid_b)} points) ===", flush=True)
+        results_2d: dict[tuple[float, float], dict] = {}
+        for va in grid_a:
+            for vb in grid_b:
+                skip_ingest = args.corpus == "longmemeval" and not longmemeval_first_pass
+                label = f"{knob_a}_{va}__{knob_b}_{vb}"
+                try:
+                    summary = _run_point(
+                        {knob_a: va, knob_b: vb}, args.corpus, args, k_values,
+                        out_dir, skip_ingest, label=label,
+                    )
+                except Exception as e:
+                    print(f"  point {label} failed: {e}", flush=True)
+                    continue
+                results_2d[(va, vb)] = summary
+                longmemeval_first_pass = False
+                overall = summary["overall"]
+                v5 = overall.get(min(k_values), {})
+                print(f"    any@{min(k_values)}={v5.get('any', 0):.1%}  "
+                      f"all={v5.get('all', 0):.1%}  frac={v5.get('frac', 0):.3f}",
+                      flush=True)
+        md_sections.append(_grid2d_table(
+            knob_a, grid_a, knob_b, grid_b, results_2d, min(k_values)))
+    else:
+        for knob in args.knobs:
+            default, grid = KNOBS[knob]
+            print(f"\n=== Sweeping {knob} (default={default}) over {grid} ===", flush=True)
+            per_knob: dict[float, dict] = {}
+            for i, val in enumerate(grid):
+                skip_ingest = args.corpus == "longmemeval" and not longmemeval_first_pass
+                try:
+                    summary = _run_point(
+                        {knob: val}, args.corpus, args, k_values, out_dir, skip_ingest,
+                    )
+                except Exception as e:
+                    print(f"  point {knob}={val} failed: {e}", flush=True)
+                    continue
+                per_knob[val] = summary
+                longmemeval_first_pass = False
 
-            overall = summary["overall"]
-            v5 = overall.get(min(k_values), {})
-            print(f"    any@{min(k_values)}={v5.get('any', 0):.1%}  "
-                  f"all={v5.get('all', 0):.1%}  frac={v5.get('frac', 0):.3f}",
-                  flush=True)
+                overall = summary["overall"]
+                v5 = overall.get(min(k_values), {})
+                print(f"    any@{min(k_values)}={v5.get('any', 0):.1%}  "
+                      f"all={v5.get('all', 0):.1%}  frac={v5.get('frac', 0):.3f}",
+                      flush=True)
 
-        if default not in per_knob:
-            print(f"  WARNING: default value {default} not in completed runs for {knob}; "
-                  f"deltas will use the lowest completed value as anchor", flush=True)
-            anchor = min(per_knob.keys()) if per_knob else default
-        else:
-            anchor = default
+            if default not in per_knob:
+                print(f"  WARNING: default value {default} not in completed runs for {knob}; "
+                      f"deltas will use the lowest completed value as anchor", flush=True)
+                anchor = min(per_knob.keys()) if per_knob else default
+            else:
+                anchor = default
 
-        md_sections.append(_knob_table(knob, anchor, per_knob, k_values))
+            md_sections.append(_knob_table(knob, anchor, per_knob, k_values))
 
     summary_path = out_dir / f"param_sweep_{args.corpus}_{datetime.now():%Y%m%d_%H%M%S}.md"
     summary_path.write_text("\n".join(md_sections))

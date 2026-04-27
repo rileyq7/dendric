@@ -132,6 +132,16 @@ class EngineConfig:
     # query entities are in the graph. This is what makes queries like
     # "Has Jamie had X?" reach memories that say "I had X."
     persona_fallback_seed: bool = True
+    # Spreading-activation propagation parameters. With decay=0.5 and
+    # max_hops=2 (the BFS defaults inside spreading_activation_recall),
+    # the activation cap at hop-1 is 0.5 and at hop-2 is 0.25. That means
+    # only seed entities (1.0) ever cross archive_trigger_threshold=0.7,
+    # making the threshold a binary seed gate rather than a graduated
+    # signal. Larger decay values let hop-1 neighbors reach the threshold;
+    # decay=0.7 makes the threshold a real discriminator (4/15 meridian
+    # probes have non-seed entities crossing 0.7) without runaway.
+    sa_decay: float = 0.5
+    sa_max_hops: int = 2
 
     # ── Lifecycle modulation at rank ──────────────────────────────────
     # Post-RRF, each candidate's fused_score is multiplied by a bounded
