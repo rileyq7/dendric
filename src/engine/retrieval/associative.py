@@ -48,6 +48,7 @@ def spreading_activation_recall(
     persona: str = "",
     persona_seed_activation: float = 0.5,
     persona_fallback: bool = True,
+    fanout_norm_exponent: float = 0.5,
 ) -> List[Dict[str, Any]]:
     """Spread activation from query entities and return the most-activated memories.
 
@@ -153,10 +154,17 @@ def spreading_activation_recall(
         linked = list(eg.get_memories_for_entity(eid))
         if not linked:
             continue
-        # Fan-out normalization: divide each contribution by sqrt(num_linked).
-        # A persona node linked to 500 memories contributes act/sqrt(500)≈act/22
-        # per memory; an entity linked to 5 memories contributes act/sqrt(5)≈act/2.2.
-        norm = 1.0 / math.sqrt(len(linked))
+        # Fan-out normalization: divide each contribution by num_linked**exp.
+        # exp=0.5 (sqrt, original): a 500-linked entity contributes act/22 per
+        #   memory; a 5-linked entity contributes act/2.2 per memory. Gentle.
+        # exp=1.0 (strict): same 500-linked entity contributes act/500 per
+        #   memory, a 5-linked entity contributes act/5. Heavily suppresses
+        #   hub-style entities (e.g. pitchwits with 541 links) that the gentle
+        #   sqrt didn't tame on dense personal corpora — see the associative-
+        #   path diagnostic in RIGOR_FINDINGS.md.
+        # Configurable via fanout_norm_exponent so the trade-off can be
+        # measured rather than committed-to a-priori.
+        norm = 1.0 / (len(linked) ** fanout_norm_exponent)
         per_memory_contrib = act * norm
         for mid in linked:
             memory_scores[str(mid)] += per_memory_contrib

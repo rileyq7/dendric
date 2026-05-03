@@ -142,6 +142,25 @@ class EngineConfig:
     # probes have non-seed entities crossing 0.7) without runaway.
     sa_decay: float = 0.5
     sa_max_hops: int = 2
+    # Fan-out normalization exponent. Each entity's per-memory contribution
+    # is divided by num_linked**exp. exp=0.5 is the original sqrt
+    # normalization (gentle); exp=1.0 is strict (1/num_linked) which much
+    # more aggressively suppresses high-degree entities. The associative-path
+    # diagnostic against meridian_deep showed sqrt is too gentle on
+    # personal corpora where hub-but-not-universal entities (e.g.
+    # pitchwits with 541 linked memories) inject off-topic candidates that
+    # displace gold. See RIGOR_FINDINGS.md for the empirical comparison.
+    sa_fanout_norm_exponent: float = 0.5
+    # Same fan-out story for the entity-graph path. Prior to this knob
+    # graph_recall scored each memory by raw Σ edge_weight, with no
+    # penalty for being linked through a high-degree entity. That made
+    # the off-topic candidate that displaced gold on probe 6 ("what is
+    # my role at pitchwits") rank highly: it was on the graph path via
+    # `pitchwits` (541 linked memories) AND on the associative path,
+    # so RRF fusion surfaced it ahead of gold. exp=0.0 is the original
+    # un-normalized behavior (default for backward-compat); >0.0 enables
+    # fan-out normalization parallel to the associative path.
+    graph_fanout_norm_exponent: float = 0.0
 
     # ── Lifecycle modulation at rank ──────────────────────────────────
     # Post-RRF, each candidate's fused_score is multiplied by a bounded

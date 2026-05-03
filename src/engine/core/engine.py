@@ -368,7 +368,10 @@ class MemoryEngine:
         if not query_entity_names:
             query_entity_names = _extract_query_concept_terms(query)
         graph_results = (
-            graph_recall(query_entity_names, self.store, top_k=overfetch)
+            graph_recall(
+                query_entity_names, self.store, top_k=overfetch,
+                fanout_norm_exponent=self.config.graph_fanout_norm_exponent,
+            )
             if self.config.enable_graph_path else []
         )
 
@@ -397,6 +400,7 @@ class MemoryEngine:
                 archive_trigger_threshold=archive_trigger,
                 decay=self.config.sa_decay,
                 max_hops=self.config.sa_max_hops,
+                fanout_norm_exponent=self.config.sa_fanout_norm_exponent,
             )
             if self.config.enable_associative_path else []
         )

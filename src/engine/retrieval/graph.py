@@ -27,6 +27,7 @@ def graph_recall(
     store,
     top_k: int = 20,
     min_edge_weight: float = 0.05,
+    fanout_norm_exponent: float = 0.0,
 ) -> List[Dict[str, Any]]:
     """
     Walk the entity graph from query entities and return connected memories.
@@ -121,6 +122,24 @@ def graph_recall(
 
         # Step 4: Find memories attached to reached entities
         reached_list = list(reached_ids)
+
+        # Per-entity link counts so the scoring step can apply fan-out
+        # normalization. A high-fanout entity (e.g. `pitchwits` with 541
+        # linked memories on meridian_deep) otherwise contributes its full
+        # edge weight to every memory it touches, drowning topically-
+        # specific candidates. See the associative-path diagnostic in
+        # RIGOR_FINDINGS.md — same fan-out problem affects this path.
+        entity_link_counts: Dict[str, int] = {}
+        if fanout_norm_exponent > 0.0:
+            cur.execute("""
+                SELECT entity_id::text AS eid, COUNT(*) AS n
+                FROM memory_entities
+                WHERE entity_id::text = ANY(%s)
+                GROUP BY entity_id
+            """, (reached_list,))
+            for row in cur.fetchall():
+                entity_link_counts[row["eid"]] = int(row["n"])
+
         # Archive excluded — only the spreading-activation déjà-vu trigger
         # is allowed to surface archived memories.
         cur.execute("""
@@ -137,12 +156,25 @@ def graph_recall(
         """, (reached_list, top_k * 2))
         mem_rows = cur.fetchall()
 
-    # Step 5: Score each memory by sum of path weights to its entities
+    # Step 5: Score each memory by sum of edge weights to its matched
+    # entities, optionally fan-out-normalized.
+    #   exp=0.0 (default, back-compat): score = Σ edge_weight(e)
+    #   exp>0.0: score = Σ edge_weight(e) / num_linked(e)**exp
+    # This is the same shape as the associative path's normalization.
     from ..storage.postgres import _row_to_mem
     results = []
     for row in mem_rows:
         matched_eids = row.get('matched_entity_ids', [])
-        graph_score = sum(edge_weights.get(eid, 0) for eid in matched_eids)
+        graph_score = 0.0
+        for eid in matched_eids:
+            w = edge_weights.get(eid, 0.0)
+            if w == 0.0:
+                continue
+            if fanout_norm_exponent > 0.0:
+                n = entity_link_counts.get(eid, 1)
+                if n > 1:
+                    w = w / (n ** fanout_norm_exponent)
+            graph_score += w
 
         mem = _row_to_mem(row)
         d = mem.to_dict()
